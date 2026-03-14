@@ -229,11 +229,25 @@ async function loadSession() {
         const manifest = await res.json();
         if (manifest.error) throw new Error(manifest.error);
 
-        frameObjects = manifest.frames || [];
-        frameURLs    = manifest.frameURLs || frameObjects.map(f =>
+        // Phase 19: filter out discarded frames before building the viewer state.
+        // Frames without a `discarded` field are always kept (backward compatible).
+        // When any frame is discarded the navigation graph indices become stale,
+        // so we fall back to linear prev/next navigation for that manifest.
+        const rawFrames = manifest.frames || [];
+        const rawURLs   = manifest.frameURLs || rawFrames.map(f =>
             `/uploads/${SCAN_ID}/frames/${f.filename || f}`
         );
-        hasGraph    = frameObjects.some(f => f.neighbors && Object.keys(f.neighbors).length > 0);
+        const hasDiscarded = rawFrames.some(f => f.discarded);
+        frameObjects = [];
+        frameURLs    = [];
+        rawFrames.forEach((frame, i) => {
+            if (!frame.discarded) {
+                frameObjects.push(frame);
+                frameURLs.push(rawURLs[i]);
+            }
+        });
+        hasGraph = !hasDiscarded &&
+            frameObjects.some(f => f.neighbors && Object.keys(f.neighbors).length > 0);
         rooms       = manifest.rooms       || [];
         annotations = manifest.annotations || [];
 
