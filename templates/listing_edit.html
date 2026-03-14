@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Edit Scan — Renderable</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg: #0a0a0a; --surface: #141414; --surface2: #1c1c1c;
+            --border: rgba(255,255,255,0.08); --text: #f0f0f0;
+            --muted: rgba(255,255,255,0.45); --accent: #4f8ef7;
+            --danger: #e05252; --radius: 12px;
+        }
+        body { background: var(--bg); color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            min-height: 100vh; padding-bottom: 60px; }
+
+        header { padding: 16px 20px; border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; gap: 14px;
+            position: sticky; top: 0; background: var(--bg); z-index: 10; }
+        header a { color: var(--muted); text-decoration: none; font-size: 13px;
+            background: rgba(255,255,255,0.07); padding: 4px 10px;
+            border-radius: 20px; border: 1px solid var(--border); }
+        header h1 { font-size: 17px; font-weight: 600; }
+
+        /* ── Tab nav ── */
+        #tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border);
+            padding: 0 20px; }
+        .tab { padding: 12px 16px; font-size: 14px; font-weight: 500;
+            color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent;
+            transition: color 0.2s, border-color 0.2s; }
+        .tab.active { color: var(--text); border-bottom-color: var(--accent); }
+
+        /* ── Panels ── */
+        .panel { display: none; max-width: 620px; margin: 0 auto;
+            padding: 24px 20px; }
+        .panel.active { display: block; }
+
+        /* ── Section header ── */
+        .section-hdr { font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.25);
+            text-transform: uppercase; letter-spacing: 1px;
+            padding-bottom: 8px; border-bottom: 1px solid var(--border);
+            margin-bottom: 16px; }
+
+        /* ── Room card ── */
+        .room-card { background: var(--surface2); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 14px 16px; margin-bottom: 10px; }
+        .room-card-row { display: flex; gap: 8px; align-items: center;
+            margin-bottom: 10px; }
+        .room-card-row:last-child { margin-bottom: 0; }
+
+        /* ── Annotation card ── */
+        .ann-card { background: var(--surface2); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 14px 16px; margin-bottom: 10px; }
+        .ann-header { display: flex; justify-content: space-between;
+            align-items: center; margin-bottom: 10px; }
+        .ann-frame-badge { font-size: 11px; font-weight: 600;
+            background: rgba(79,142,247,0.15); color: var(--accent);
+            padding: 2px 8px; border-radius: 10px; }
+
+        /* ── Inputs ── */
+        input, textarea, select {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 8px; padding: 9px 12px; color: var(--text);
+            font-size: 14px; outline: none; font-family: inherit;
+            transition: border-color 0.2s; }
+        input:focus, textarea:focus, select:focus { border-color: var(--accent); }
+        input::placeholder, textarea::placeholder { color: var(--muted); }
+        select option { background: #1a1a1a; }
+        textarea { resize: vertical; min-height: 64px; width: 100%; }
+
+        .input-full { width: 100%; }
+        .input-sm   { width: 72px; }
+        .input-icon { width: 52px; text-align: center; }
+
+        /* ── Buttons ── */
+        .btn { padding: 8px 14px; border-radius: 8px; border: 1px solid var(--border);
+            background: rgba(255,255,255,0.06); color: var(--text);
+            font-size: 13px; font-weight: 500; cursor: pointer;
+            transition: background 0.15s; }
+        .btn:hover { background: rgba(255,255,255,0.12); }
+        .btn-accent { background: var(--accent); border-color: var(--accent); color: #fff; }
+        .btn-accent:hover { background: #6a9ff8; }
+        .btn-danger { background: none; border-color: transparent; color: var(--danger);
+            font-size: 16px; padding: 4px 8px; }
+        .btn-danger:hover { background: rgba(224,82,82,0.1); }
+        .btn-add { width: 100%; margin-top: 4px; border-style: dashed; }
+
+        /* ── Save bar ── */
+        .save-bar { display: flex; align-items: center; gap: 12px;
+            margin-top: 20px; }
+        #status-rooms, #status-ann { font-size: 13px; color: var(--muted); }
+        .ok { color: #4caf7d !important; }
+        .err { color: var(--danger) !important; }
+
+        /* ── Frame strip ── */
+        #frame-strip { display: flex; gap: 6px; overflow-x: auto;
+            padding: 4px 0 8px; margin-bottom: 16px; }
+        #frame-strip::-webkit-scrollbar { height: 4px; }
+        #frame-strip::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+        .fthumb { width: 64px; height: 48px; object-fit: cover; border-radius: 6px;
+            border: 2px solid transparent; cursor: pointer; flex-shrink: 0;
+            transition: border-color 0.15s; }
+        .fthumb.selected { border-color: var(--accent); }
+
+        .spinner { display: inline-block; width: 16px; height: 16px;
+            border: 2px solid rgba(255,255,255,0.1); border-top-color: var(--accent);
+            border-radius: 50%; animation: spin 0.75s linear infinite; vertical-align: middle; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+<header>
+    <a href="/scans">← Library</a>
+    <h1>Edit Scan</h1>
+</header>
+
+<div id="tabs">
+    <div class="tab active" onclick="switchTab('rooms')">🏠 Rooms</div>
+    <div class="tab"        onclick="switchTab('annotations')">📌 Annotations</div>
+</div>
+
+<!-- ── Rooms panel ── -->
+<div class="panel active" id="panel-rooms">
+    <p class="section-hdr">Room Labels</p>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:16px">
+        Define which frames belong to each room. Frame indices start at 0.
+    </p>
+    <div id="rooms-list"></div>
+    <button class="btn btn-add" onclick="addRoom()">+ Add Room</button>
+    <div class="save-bar">
+        <button class="btn btn-accent" onclick="saveRooms()">Save Rooms</button>
+        <span id="status-rooms"></span>
+    </div>
+</div>
+
+<!-- ── Annotations panel ── -->
+<div class="panel" id="panel-annotations">
+    <p class="section-hdr">Frame Annotations</p>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:12px">
+        Add notes, features, or highlights to specific frames.
+    </p>
+
+    <!-- Frame thumbnail strip -->
+    <div id="frame-strip"></div>
+
+    <div id="annotations-list"></div>
+    <button class="btn btn-add" onclick="addAnnotation()">+ Add Annotation</button>
+    <div class="save-bar">
+        <button class="btn btn-accent" onclick="saveAnnotations()">Save Annotations</button>
+        <span id="status-ann"></span>
+    </div>
+</div>
+
+<script>
+const SCAN_ID = "{{ scan_id }}";
+let frameCount = 0;
+let frameURLs  = [];
+let rooms      = [];
+let annotations = [];
+
+const ANNOTATION_TYPES = ["info","feature","upgrade","caution","access"];
+const ROOM_ICONS = ["🏠","🛋","🍳","🛏","🚿","🪴","🏢","📦","🚗","🌿"];
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+
+async function init() {
+    try {
+        const res = await fetch(`/api/manifest/${SCAN_ID}`);
+        const manifest = await res.json();
+        frameCount = manifest.frame_count || 0;
+        frameURLs  = manifest.frameURLs   || [];
+        rooms      = manifest.rooms       || [];
+        annotations = manifest.annotations || [];
+        buildFrameStrip();
+        renderRooms();
+        renderAnnotations();
+    } catch (e) {
+        document.body.innerHTML += `<p style="color:#e05252;padding:20px">Failed to load: ${e.message}</p>`;
+    }
+}
+
+// ── Tab switching ─────────────────────────────────────────────────────────────
+
+function switchTab(name) {
+    document.querySelectorAll(".tab").forEach((t, i) => {
+        t.classList.toggle("active", ["rooms","annotations"][i] === name);
+    });
+    document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
+    document.getElementById(`panel-${name}`).classList.add("active");
+}
+
+// ── Frame strip ───────────────────────────────────────────────────────────────
+
+function buildFrameStrip() {
+    const strip = document.getElementById("frame-strip");
+    strip.innerHTML = "";
+    frameURLs.forEach((url, i) => {
+        const img = document.createElement("img");
+        img.className = "fthumb";
+        img.src = url;
+        img.title = `Frame ${i}`;
+        img.onclick = () => selectFrame(i);
+        strip.appendChild(img);
+    });
+}
+
+function selectFrame(index) {
+    document.querySelectorAll(".fthumb").forEach((img, i) => {
+        img.classList.toggle("selected", i === index);
+    });
+    // Set frame_index on the last annotation or the new annotation form
+    const cards = document.querySelectorAll(".ann-card");
+    if (cards.length > 0) {
+        const last = cards[cards.length - 1];
+        const fi = last.querySelector(".ann-frame-input");
+        if (fi && fi.value === "") fi.value = index;
+    }
+}
+
+// ── Rooms ─────────────────────────────────────────────────────────────────────
+
+function renderRooms() {
+    const list = document.getElementById("rooms-list");
+    list.innerHTML = "";
+    rooms.forEach((room, i) => list.appendChild(makeRoomCard(room, i)));
+}
+
+function makeRoomCard(room, i) {
+    const div = document.createElement("div");
+    div.className = "room-card";
+    div.innerHTML = `
+        <div class="room-card-row">
+            <input class="input-icon" type="text" value="${esc(room.icon || '🏠')}"
+                placeholder="🏠" title="Icon emoji" oninput="rooms[${i}].icon=this.value">
+            <input class="input-full" type="text" value="${esc(room.name)}"
+                placeholder="Room name" oninput="rooms[${i}].name=this.value">
+            <button class="btn btn-danger" onclick="removeRoom(${i})">✕</button>
+        </div>
+        <div class="room-card-row" style="gap:12px;align-items:center">
+            <label style="font-size:12px;color:var(--muted);white-space:nowrap">Frames</label>
+            <input class="input-sm" type="number" min="0" max="${frameCount-1}"
+                value="${room.start_frame}" placeholder="From"
+                oninput="rooms[${i}].start_frame=+this.value">
+            <span style="color:var(--muted);font-size:13px">→</span>
+            <input class="input-sm" type="number" min="0" max="${frameCount-1}"
+                value="${room.end_frame}" placeholder="To"
+                oninput="rooms[${i}].end_frame=+this.value">
+            <span style="font-size:12px;color:var(--muted)">(0–${frameCount-1})</span>
+        </div>
+    `;
+    return div;
+}
+
+function addRoom() {
+    rooms.push({ id: newId(), name: "", start_frame: 0, end_frame: 0, icon: "🏠" });
+    renderRooms();
+}
+
+function removeRoom(i) {
+    rooms.splice(i, 1);
+    renderRooms();
+}
+
+async function saveRooms() {
+    setStatus("status-rooms", '<span class="spinner"></span>', "");
+    try {
+        const res = await fetch(`/api/scans/${SCAN_ID}/rooms`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(rooms)
+        });
+        if (!res.ok) throw new Error("Save failed");
+        setStatus("status-rooms", "✓ Saved", "ok");
+    } catch (e) {
+        setStatus("status-rooms", "✗ " + e.message, "err");
+    }
+}
+
+// ── Annotations ───────────────────────────────────────────────────────────────
+
+function renderAnnotations() {
+    const list = document.getElementById("annotations-list");
+    list.innerHTML = "";
+    annotations.forEach((ann, i) => list.appendChild(makeAnnCard(ann, i)));
+}
+
+function makeAnnCard(ann, i) {
+    const typeOptions = ANNOTATION_TYPES.map(t =>
+        `<option value="${t}" ${ann.type === t ? "selected" : ""}>${t}</option>`
+    ).join("");
+
+    const div = document.createElement("div");
+    div.className = "ann-card";
+    div.innerHTML = `
+        <div class="ann-header">
+            <span class="ann-frame-badge">Frame
+                <input class="ann-frame-input" type="number" min="0" max="${frameCount-1}"
+                    value="${ann.frame_index}"
+                    style="width:44px;padding:2px 4px;background:transparent;
+                           border:none;border-bottom:1px solid var(--accent);
+                           color:var(--accent);font-weight:600;font-size:11px;outline:none"
+                    oninput="annotations[${i}].frame_index=+this.value">
+            </span>
+            <div style="display:flex;gap:8px;align-items:center">
+                <select style="padding:4px 8px;font-size:12px"
+                    onchange="annotations[${i}].type=this.value">
+                    ${typeOptions}
+                </select>
+                <button class="btn btn-danger" onclick="removeAnnotation(${i})">✕</button>
+            </div>
+        </div>
+        <input class="input-full" type="text" value="${esc(ann.title)}"
+            placeholder="Title / headline"
+            oninput="annotations[${i}].title=this.value"
+            style="margin-bottom:8px">
+        <textarea placeholder="Optional details..."
+            oninput="annotations[${i}].body=this.value">${esc(ann.body)}</textarea>
+    `;
+    return div;
+}
+
+function addAnnotation() {
+    const frameIndex = parseInt(
+        document.querySelector(".fthumb.selected")?.title?.replace("Frame ", "") || "0"
+    );
+    annotations.push({
+        id: newId(), frame_index: frameIndex,
+        title: "", body: "", type: "info"
+    });
+    renderAnnotations();
+    // Scroll to bottom
+    document.getElementById("annotations-list").lastElementChild
+        ?.scrollIntoView({ behavior: "smooth" });
+}
+
+function removeAnnotation(i) {
+    annotations.splice(i, 1);
+    renderAnnotations();
+}
+
+async function saveAnnotations() {
+    setStatus("status-ann", '<span class="spinner"></span>', "");
+    try {
+        const res = await fetch(`/api/scans/${SCAN_ID}/annotations`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(annotations)
+        });
+        if (!res.ok) throw new Error("Save failed");
+        setStatus("status-ann", "✓ Saved", "ok");
+    } catch (e) {
+        setStatus("status-ann", "✗ " + e.message, "err");
+    }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function setStatus(id, msg, cls) {
+    const el = document.getElementById(id);
+    el.innerHTML = msg;
+    el.className = cls;
+    if (cls === "ok") setTimeout(() => { el.textContent = ""; }, 3000);
+}
+
+function newId() { return Math.random().toString(36).slice(2, 10); }
+
+function esc(str) {
+    return String(str || "")
+        .replace(/&/g, "&amp;").replace(/"/g, "&quot;")
+        .replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+init();
+</script>
+</body>
+</html>

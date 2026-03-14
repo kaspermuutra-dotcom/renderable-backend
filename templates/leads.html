@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Leads — Renderable</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg: #0a0a0a; --surface: #141414; --surface2: #1c1c1c;
+            --border: rgba(255,255,255,0.08); --text: #f0f0f0;
+            --muted: rgba(255,255,255,0.45); --accent: #4f8ef7;
+            --green: #4caf7d; --orange: #f7a34f; --danger: #e05252;
+            --radius: 12px;
+        }
+        body { background: var(--bg); color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            min-height: 100vh; padding-bottom: 60px; }
+
+        header { padding: 18px 20px; border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; gap: 14px;
+            position: sticky; top: 0; background: var(--bg); z-index: 10; }
+        header a { color: var(--muted); text-decoration: none; font-size: 13px;
+            background: rgba(255,255,255,0.07); padding: 4px 10px;
+            border-radius: 20px; border: 1px solid var(--border); }
+        header h1 { font-size: 17px; font-weight: 600; flex: 1; }
+        .scan-id { font-size: 11px; color: var(--muted); font-family: monospace; }
+
+        .page { max-width: 720px; margin: 0 auto; padding: 20px; }
+
+        /* ── Summary strip ── */
+        .summary-strip { display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; }
+        .summary-card { background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 14px 18px; flex: 1; min-width: 110px; }
+        .summary-value { font-size: 26px; font-weight: 700; }
+        .summary-label { font-size: 12px; color: var(--muted); margin-top: 2px; }
+        .summary-card.accent .summary-value { color: var(--accent); }
+        .summary-card.green  .summary-value { color: var(--green); }
+
+        /* ── Lead card ── */
+        .lead-card { background: var(--surface2); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 16px; margin-bottom: 10px; }
+        .lead-header { display: flex; align-items: flex-start;
+            justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+        .lead-name { font-size: 15px; font-weight: 600; }
+        .lead-time { font-size: 11px; color: var(--muted); margin-top: 2px; }
+        .lead-badge { font-size: 11px; font-weight: 600; padding: 3px 10px;
+            border-radius: 20px; border: 1px solid; white-space: nowrap; flex-shrink: 0; }
+        .badge-new       { color: var(--accent);  border-color: var(--accent); }
+        .badge-contacted { color: var(--green);   border-color: var(--green); }
+        .badge-archived  { color: var(--muted);   border-color: var(--muted); }
+
+        .lead-contact { display: flex; gap: 14px; flex-wrap: wrap;
+            font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+        .lead-contact a { color: var(--accent); text-decoration: none; }
+        .lead-contact a:hover { text-decoration: underline; }
+
+        .lead-message { font-size: 13px; color: rgba(255,255,255,0.7);
+            line-height: 1.5; background: rgba(255,255,255,0.04);
+            border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; }
+
+        .lead-meta { font-size: 11px; color: var(--muted);
+            display: flex; gap: 12px; flex-wrap: wrap; }
+
+        .lead-actions { display: flex; gap: 8px; margin-top: 10px;
+            padding-top: 10px; border-top: 1px solid var(--border); }
+        .btn-sm { padding: 5px 12px; border-radius: 6px; font-size: 12px;
+            font-weight: 500; cursor: pointer; border: 1px solid var(--border);
+            background: rgba(255,255,255,0.06); color: var(--text);
+            transition: background 0.15s; text-decoration: none; display: inline-block; }
+        .btn-sm:hover { background: rgba(255,255,255,0.12); }
+        .btn-sm.green { color: var(--green); border-color: var(--green); }
+        .btn-sm.green:hover { background: rgba(76,175,125,0.1); }
+        .btn-sm.muted { color: var(--muted); }
+
+        /* ── Type chip ── */
+        .type-chip { font-size: 11px; color: var(--orange);
+            border: 1px solid var(--orange); padding: 2px 8px;
+            border-radius: 20px; display: inline-block; }
+
+        /* ── Empty / loading ── */
+        .empty { text-align: center; padding: 60px 20px; color: var(--muted); }
+        .empty-icon { font-size: 40px; opacity: 0.3; margin-bottom: 12px; }
+        .empty h3 { font-size: 16px; font-weight: 600; color: var(--text);
+            opacity: 0.6; margin-bottom: 6px; }
+        #loading { display: flex; align-items: center; justify-content: center;
+            min-height: 40vh; gap: 12px; color: var(--muted); font-size: 14px; }
+        .spinner { width: 20px; height: 20px;
+            border: 2px solid rgba(255,255,255,0.1); border-top-color: var(--accent);
+            border-radius: 50%; animation: spin 0.75s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .hidden { display: none !important; }
+
+        /* ── Toast ── */
+        #toast { position: fixed; bottom: 24px; left: 50%;
+            transform: translateX(-50%) translateY(20px);
+            background: #1e1e1e; border: 1px solid var(--border);
+            color: var(--text); padding: 10px 20px; border-radius: 20px;
+            font-size: 13px; opacity: 0; transition: opacity 0.3s, transform 0.3s;
+            z-index: 100; white-space: nowrap; }
+        #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    </style>
+</head>
+<body>
+
+<header>
+    <a href="/scans">← Library</a>
+    <h1 id="page-title">Leads</h1>
+    <span class="scan-id" id="scan-id-label"></span>
+</header>
+
+<div id="loading">
+    <div class="spinner"></div>
+    Loading leads...
+</div>
+
+<div id="main" class="hidden">
+    <div class="page">
+        <div class="summary-strip" id="summary-strip"></div>
+        <div id="leads-list"></div>
+    </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const SCAN_ID = "{{ scan_id }}";
+let leads = [];
+
+const TYPE_LABELS = {
+    request_viewing: "Request Viewing",
+    ask_question:    "Question",
+    contact_me:      "Contact Me",
+    general:         "General Inquiry"
+};
+
+async function load() {
+    try {
+        const [mRes, lRes] = await Promise.all([
+            fetch(`/api/manifest/${SCAN_ID}`),
+            fetch(`/api/scans/${SCAN_ID}/leads`)
+        ]);
+        const manifest = await mRes.json();
+        leads = await lRes.json();
+
+        document.getElementById("page-title").textContent =
+            (manifest.scan_name || SCAN_ID) + " — Leads";
+        document.getElementById("scan-id-label").textContent = SCAN_ID;
+
+        document.getElementById("loading").style.display = "none";
+        document.getElementById("main").classList.remove("hidden");
+
+        renderSummary();
+        renderLeads();
+    } catch (e) {
+        document.getElementById("loading").innerHTML =
+            `<span style="color:#e05252">Failed to load: ${e.message}</span>`;
+    }
+}
+
+function renderSummary() {
+    const total     = leads.length;
+    const newLeads  = leads.filter(l => l.status === "new").length;
+    const contacted = leads.filter(l => l.status === "contacted").length;
+    document.getElementById("summary-strip").innerHTML = `
+        <div class="summary-card accent">
+            <div class="summary-value">${total}</div>
+            <div class="summary-label">Total Leads</div>
+        </div>
+        <div class="summary-card">
+            <div class="summary-value">${newLeads}</div>
+            <div class="summary-label">New</div>
+        </div>
+        <div class="summary-card green">
+            <div class="summary-value">${contacted}</div>
+            <div class="summary-label">Contacted</div>
+        </div>
+    `;
+}
+
+function renderLeads() {
+    const list = document.getElementById("leads-list");
+    if (leads.length === 0) {
+        list.innerHTML = `
+            <div class="empty">
+                <div class="empty-icon">📬</div>
+                <h3>No leads yet</h3>
+                <p>Share your property tour and leads will appear here when viewers submit inquiries.</p>
+            </div>`;
+        return;
+    }
+
+    list.innerHTML = leads.map((lead, i) => {
+        const badgeClass = `badge-${lead.status || "new"}`;
+        const badgeLabel = (lead.status || "new").charAt(0).toUpperCase() + (lead.status || "new").slice(1);
+        const typeLabel  = TYPE_LABELS[lead.inquiry_type] || lead.inquiry_type || "Inquiry";
+        const date       = formatDate(lead.created_at);
+        const emailHref  = `mailto:${lead.email}?subject=Re: Property Inquiry&body=Hi ${encodeURIComponent(lead.full_name)},`;
+        const phoneHref  = lead.phone ? `tel:${lead.phone}` : null;
+
+        return `
+        <div class="lead-card" id="lead-${lead.lead_id}">
+            <div class="lead-header">
+                <div>
+                    <div class="lead-name">${esc(lead.full_name)}</div>
+                    <div class="lead-time">${date} · ${lead.source_page || "share"}</div>
+                </div>
+                <span class="lead-badge ${badgeClass}">${badgeLabel}</span>
+            </div>
+
+            <div class="lead-contact">
+                <a href="${emailHref}">✉️ ${esc(lead.email)}</a>
+                ${lead.phone ? `<a href="${phoneHref}">📞 ${esc(lead.phone)}</a>` : ""}
+                <span class="type-chip">${esc(typeLabel)}</span>
+            </div>
+
+            ${lead.message ? `<div class="lead-message">${esc(lead.message)}</div>` : ""}
+
+            <div class="lead-meta">
+                ${lead.source_frame_index != null ? `<span>Frame ${lead.source_frame_index}</span>` : ""}
+                <span>ID: ${lead.lead_id}</span>
+            </div>
+
+            <div class="lead-actions">
+                <a href="${emailHref}" class="btn-sm green">✉️ Reply</a>
+                ${lead.status !== "contacted"
+                    ? `<button class="btn-sm" onclick="setStatus('${lead.lead_id}', 'contacted', ${i})">✓ Mark Contacted</button>`
+                    : ""}
+                ${lead.status !== "archived"
+                    ? `<button class="btn-sm muted" onclick="setStatus('${lead.lead_id}', 'archived', ${i})">Archive</button>`
+                    : `<button class="btn-sm muted" onclick="setStatus('${lead.lead_id}', 'new', ${i})">Restore</button>`}
+            </div>
+        </div>`;
+    }).join("");
+}
+
+async function setStatus(leadId, status, index) {
+    try {
+        const res = await fetch(`/api/leads/${SCAN_ID}/${leadId}/status`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status })
+        });
+        if (!res.ok) throw new Error("Failed");
+        leads[index].status = status;
+        renderSummary();
+        renderLeads();
+        showToast(`Lead marked as ${status}`);
+    } catch (e) {
+        showToast("Failed to update status");
+    }
+}
+
+function formatDate(iso) {
+    if (!iso) return "Unknown";
+    try {
+        const d    = new Date(iso);
+        const now  = new Date();
+        const diff = Math.floor((now - d) / 1000);
+        if      (diff < 60)    return "just now";
+        if      (diff < 3600)  return `${Math.floor(diff/60)}m ago`;
+        if      (diff < 86400) return `${Math.floor(diff/3600)}h ago`;
+        return d.toLocaleDateString() + " " + d.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});
+    } catch { return "Unknown"; }
+}
+
+function showToast(msg) {
+    const t = document.getElementById("toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    setTimeout(() => t.classList.remove("show"), 2500);
+}
+
+function esc(str) {
+    return String(str)
+        .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+load();
+</script>
+</body>
+</html>

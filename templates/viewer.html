@@ -1,26 +1,570 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
     <title>Renderable Viewer</title>
-    <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; }
-        h1 { color: white; font-family: sans-serif; margin-bottom: 24px; }
-        model-viewer { width: 100vw; height: 85vh; }
+        body { background: #000; color: #fff;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            height: 100dvh; overflow: hidden; }
+
+        #viewer { position: absolute; inset: 0; overflow: hidden; cursor: grab; }
+        #viewer:active { cursor: grabbing; }
+
+        .frame-layer { position: absolute; inset: 0; width: 100%; height: 100%;
+            object-fit: cover; will-change: transform, opacity;
+            user-select: none; -webkit-user-drag: none; pointer-events: none; }
+
+        #frame-current { z-index: 2; opacity: 1; transform: scale(1) translateX(0px); }
+        #frame-next    { z-index: 1; opacity: 0; transform: scale(1.04) translateX(0px); }
+
+        #hotspots { position: absolute; inset: 0; z-index: 15; pointer-events: none; }
+
+        .hotspot { position: absolute; pointer-events: all; display: flex;
+            flex-direction: column; align-items: center; gap: 6px; cursor: pointer;
+            transform: translate(-50%, -50%); transition: opacity 0.3s ease; }
+        .hotspot-ring { width: 52px; height: 52px; border-radius: 50%;
+            background: rgba(255,255,255,0.12); border: 2px solid rgba(255,255,255,0.6);
+            backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 20px; transition: background 0.15s, transform 0.15s;
+            animation: pulse 2.4s ease-in-out infinite; }
+        .hotspot:active .hotspot-ring { background: rgba(255,255,255,0.3);
+            transform: scale(0.9); animation: none; }
+        .hotspot-label { font-size: 11px; font-weight: 600; letter-spacing: 0.5px;
+            color: rgba(255,255,255,0.8); text-transform: uppercase;
+            text-shadow: 0 1px 4px rgba(0,0,0,0.8); }
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(255,255,255,0.25); }
+            50%       { box-shadow: 0 0 0 8px rgba(255,255,255,0); }
+        }
+
+        #topbar { position: absolute; top: 0; left: 0; right: 0; z-index: 20;
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 16px 20px;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.65), transparent); }
+        #topbar h1 { font-size: 16px; font-weight: 700; letter-spacing: 1px;
+            text-transform: uppercase; }
+        #progress { font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.85);
+            background: rgba(255,255,255,0.12); padding: 4px 12px; border-radius: 20px;
+            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.15); }
+
+        #room-label { display: none; position: absolute; top: 70px; left: 50%;
+            transform: translateX(-50%); z-index: 20;
+            background: rgba(0,0,0,0.55); backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border: 1px solid rgba(255,255,255,0.15);
+            padding: 5px 14px; border-radius: 20px; font-size: 13px; font-weight: 500;
+            color: rgba(255,255,255,0.9); pointer-events: none;
+            transition: opacity 0.3s ease; white-space: nowrap; }
+
+        #ann-panel { display: none; position: absolute; bottom: 155px;
+            left: 16px; right: 16px; z-index: 20;
+            background: rgba(15,15,15,0.88); backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 12px; padding: 12px 14px;
+            font-size: 13px; line-height: 1.5; }
+        #ann-title { font-weight: 600; margin-bottom: 2px; }
+        #ann-body  { color: rgba(255,255,255,0.6); font-size: 12px; }
+        #ann-type  { margin-top: 6px; font-size: 11px; color: rgba(255,255,255,0.35); }
+
+        #dots { position: absolute; bottom: 100px; left: 50%;
+            transform: translateX(-50%); z-index: 20;
+            display: flex; gap: 5px; align-items: center; }
+        .dot { width: 5px; height: 5px; border-radius: 3px;
+            background: rgba(255,255,255,0.3);
+            transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1); cursor: pointer; }
+        .dot.active { width: 22px; background: #fff; }
+
+        #controls { position: absolute; bottom: 0; left: 0; right: 0; z-index: 20;
+            display: flex; justify-content: center; align-items: center;
+            padding: 16px 0 44px;
+            background: linear-gradient(to top, rgba(0,0,0,0.65), transparent); }
+        #play-btn { background: rgba(255,255,255,0.18);
+            border: 1px solid rgba(255,255,255,0.2); color: #fff;
+            width: 58px; height: 58px; border-radius: 50%; font-size: 22px;
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+            backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+            transition: transform 0.15s, background 0.2s; }
+        #play-btn:active { transform: scale(0.88); background: rgba(255,255,255,0.3); }
+
+        #hint { position: absolute; bottom: 68px; left: 50%;
+            transform: translateX(-50%); z-index: 20; font-size: 12px;
+            color: rgba(255,255,255,0.4); letter-spacing: 0.5px;
+            pointer-events: none; transition: opacity 0.6s ease; white-space: nowrap; }
+
+        #debug { display: none; position: absolute; top: 70px; left: 16px; z-index: 25;
+            font-size: 11px; font-family: monospace; color: rgba(255,255,255,0.5);
+            background: rgba(0,0,0,0.5); padding: 6px 10px; border-radius: 6px;
+            pointer-events: none; line-height: 1.6; }
+
+        #loading, #error-state { position: absolute; inset: 0; z-index: 30;
+            display: flex; flex-direction: column; align-items: center;
+            justify-content: center; gap: 18px; background: #000; }
+        #error-state { display: none; }
+        .spinner { width: 36px; height: 36px;
+            border: 2.5px solid rgba(255,255,255,0.15); border-top-color: #fff;
+            border-radius: 50%; animation: spin 0.75s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .state-label { font-size: 14px; color: rgba(255,255,255,0.5); }
+        .error-icon  { font-size: 44px; }
     </style>
 </head>
 <body>
-    <h1>Renderable</h1>
-    <model-viewer
-        src="/uploads/{{ scan_id }}/scan.usdz"
-        ar
-        ar-modes="webxr scene-viewer quick-look"
-        camera-controls
-        auto-rotate
-        shadow-intensity="1">
-    </model-viewer>
+
+<div id="loading">
+    <div class="spinner"></div>
+    <p class="state-label">Loading capture...</p>
+</div>
+<div id="error-state">
+    <div class="error-icon">⚠️</div>
+    <p class="state-label" id="error-msg">Could not load this capture.</p>
+</div>
+
+<div id="viewer">
+    <img id="frame-next"    class="frame-layer" src="" alt="">
+    <img id="frame-current" class="frame-layer" src="" alt="Room frame">
+    <div id="hotspots"></div>
+</div>
+
+<div id="topbar">
+    <div style="display:flex;align-items:center;gap:12px">
+        <a href="/scans" style="color:rgba(255,255,255,0.6);font-size:13px;text-decoration:none;
+           background:rgba(255,255,255,0.1);padding:4px 10px;border-radius:20px;
+           border:1px solid rgba(255,255,255,0.15)">← Library</a>
+        <h1>Renderable</h1>
+    </div>
+    <span id="progress">— / —</span>
+</div>
+
+<div id="room-label"></div>
+<div id="ann-panel">
+    <div id="ann-title"></div>
+    <div id="ann-body"></div>
+    <div id="ann-type"></div>
+</div>
+<div id="dots"></div>
+<div id="hint">tap hotspots or swipe to move</div>
+<div id="debug"></div>
+
+<div id="controls">
+    <button id="play-btn" onclick="togglePlay()">&#9654;</button>
+</div>
+
+<script>
+const SCAN_ID = "{{ scan_id }}";
+
+// ── Analytics ─────────────────────────────────────────────────────────────────
+
+const SESSION_ID = Math.random().toString(36).slice(2, 10);
+let lastFrameTracked = -1;
+
+function track(eventType, extra = {}) {
+    const payload = {
+        scan_id:     SCAN_ID,
+        session_id:  SESSION_ID,
+        event_type:  eventType,
+        source_page: "viewer",
+        ...extra
+    };
+    navigator.sendBeacon
+        ? navigator.sendBeacon("/analytics/event", JSON.stringify(payload))
+        : fetch("/analytics/event", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+            keepalive: true
+          }).catch(() => {});
+}
+
+function trackFrame(index) {
+    if (index === lastFrameTracked) return;
+    lastFrameTracked = index;
+    const room = getRoomForFrame(index);
+    track("frame_view", {
+        frame_index: index,
+        room_name:   room ? room.name : null
+    });
+}
+
+// Send session_end on page unload
+window.addEventListener("pagehide", () => track("session_end"));
+document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") track("session_end");
+});
+
+// ── State ─────────────────────────────────────────────────────────────────────
+
+let frameObjects  = [];
+let frameURLs     = [];
+let current       = 0;
+let isPlaying     = false;
+let playTimer     = null;
+let isAnimating   = false;
+let hasGraph      = false;
+let rooms         = [];
+let annotations   = [];
+
+const imgCurrent = document.getElementById("frame-current");
+const imgNext    = document.getElementById("frame-next");
+
+const HOTSPOT_POSITIONS = {
+    forward: { left: "50%", top: "38%" },
+    back:    { left: "50%", top: "68%" },
+    left:    { left: "18%", top: "50%" },
+    right:   { left: "82%", top: "50%" }
+};
+const HOTSPOT_ICONS = { forward: "↑", back: "↓", left: "←", right: "→" };
+
+// ── Load ──────────────────────────────────────────────────────────────────────
+
+async function loadSession() {
+    try {
+        const res = await fetch(`/api/manifest/${SCAN_ID}`);
+        if (!res.ok) throw new Error(`Server error ${res.status}`);
+        const manifest = await res.json();
+        if (manifest.error) throw new Error(manifest.error);
+
+        frameObjects = manifest.frames || [];
+        frameURLs    = manifest.frameURLs || frameObjects.map(f =>
+            `/uploads/${SCAN_ID}/frames/${f.filename || f}`
+        );
+        hasGraph    = frameObjects.some(f => f.neighbors && Object.keys(f.neighbors).length > 0);
+        rooms       = manifest.rooms       || [];
+        annotations = manifest.annotations || [];
+
+        if (frameURLs.length === 0) throw new Error("No frames found");
+
+        preloadNeighbors(0, () => {
+            buildDots();
+            setFrame(0);
+            document.getElementById("loading").style.display = "none";
+            setTimeout(() => {
+                document.getElementById("hint").style.opacity = "0";
+            }, 4000);
+        });
+
+        // Fire analytics
+        track("session_start");
+        track("viewer_open");
+
+    } catch (e) {
+        document.getElementById("loading").style.display = "none";
+        document.getElementById("error-state").style.display = "flex";
+        document.getElementById("error-msg").textContent = `Could not load capture: ${e.message}`;
+    }
+}
+
+// ── Preload ───────────────────────────────────────────────────────────────────
+
+function preloadNeighbors(index, callback) {
+    let loaded = 0;
+    const total = frameURLs.length;
+    if (total === 0) { callback(); return; }
+    frameURLs.forEach(url => {
+        const img = new Image();
+        img.onload  = () => { loaded++; if (loaded === total) callback(); };
+        img.onerror = () => { loaded++; if (loaded === total) callback(); };
+        img.src = url;
+    });
+}
+
+// ── Set frame ─────────────────────────────────────────────────────────────────
+
+function setFrame(index) {
+    current = clamp(index, 0, frameURLs.length - 1);
+    imgCurrent.style.transition = "none";
+    imgCurrent.src = frameURLs[current];
+    imgCurrent.style.transform = "scale(1) translateX(0px)";
+    imgCurrent.style.opacity = "1";
+    imgNext.style.opacity = "0";
+    updateUI();
+    trackFrame(current);
+}
+
+// ── Animated transition ───────────────────────────────────────────────────────
+
+function goTo(index, direction = 1) {
+    if (isAnimating) return;
+    const target = clamp(index, 0, frameURLs.length - 1);
+    if (target === current) return;
+    isAnimating = true;
+
+    const slideOut = direction > 0 ? "-7%" : "7%";
+    const slideIn  = direction > 0 ?  "5%" : "-5%";
+
+    imgNext.src = frameURLs[target];
+    imgNext.style.transition = "none";
+    imgNext.style.transform  = `scale(1.05) translateX(${slideIn})`;
+    imgNext.style.opacity    = "0";
+
+    imgCurrent.style.transition = "transform 0.38s cubic-bezier(0.4,0,0.2,1), opacity 0.32s ease";
+    imgCurrent.style.transform  = `scale(0.96) translateX(${slideOut})`;
+    imgCurrent.style.opacity    = "0";
+
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+        imgNext.style.transition = "transform 0.42s cubic-bezier(0.4,0,0.2,1), opacity 0.35s ease";
+        imgNext.style.transform  = "scale(1) translateX(0%)";
+        imgNext.style.opacity    = "1";
+    }));
+
+    setTimeout(() => {
+        imgCurrent.style.transition = "none";
+        imgCurrent.src = frameURLs[target];
+        imgCurrent.style.transform = "scale(1) translateX(0px)";
+        imgCurrent.style.opacity   = "1";
+        imgNext.style.transition   = "none";
+        imgNext.style.opacity      = "0";
+        current     = target;
+        isAnimating = false;
+        updateUI();
+        trackFrame(current);
+    }, 420);
+}
+
+// ── Navigation ────────────────────────────────────────────────────────────────
+
+function getNeighbors(index) {
+    if (hasGraph && frameObjects[index] && frameObjects[index].neighbors)
+        return frameObjects[index].neighbors;
+    const nb = {};
+    if (index > 0)                    nb.back    = index - 1;
+    if (index < frameURLs.length - 1) nb.forward = index + 1;
+    return nb;
+}
+
+function next() { stopPlay(); const nb = getNeighbors(current); if (nb.forward !== undefined) goTo(nb.forward,  1); }
+function prev() { stopPlay(); const nb = getNeighbors(current); if (nb.back    !== undefined) goTo(nb.back,    -1); }
+
+function moveInDirection(dir) {
+    stopPlay();
+    const nb = getNeighbors(current);
+    if (nb[dir] !== undefined)
+        goTo(nb[dir], (dir === "forward" || dir === "right") ? 1 : -1);
+}
+
+// ── Hotspots ──────────────────────────────────────────────────────────────────
+
+function renderHotspots() {
+    const container = document.getElementById("hotspots");
+    container.innerHTML = "";
+    const nb = getNeighbors(current);
+    Object.entries(nb).forEach(([dir, targetIndex]) => {
+        const pos = HOTSPOT_POSITIONS[dir];
+        if (!pos) return;
+        const hotspot = document.createElement("div");
+        hotspot.className = "hotspot";
+        hotspot.style.left = pos.left;
+        hotspot.style.top  = pos.top;
+        hotspot.innerHTML  = `
+            <div class="hotspot-ring">${HOTSPOT_ICONS[dir] || "●"}</div>
+            <span class="hotspot-label">${dir}</span>
+        `;
+        hotspot.addEventListener("click", () => moveInDirection(dir));
+        hotspot.addEventListener("touchend", e => { e.stopPropagation(); moveInDirection(dir); });
+        container.appendChild(hotspot);
+    });
+}
+
+// ── Room label ────────────────────────────────────────────────────────────────
+
+function getRoomForFrame(index) {
+    return rooms.find(r => index >= (r.start_frame ?? 0) && index <= (r.end_frame ?? 0)) || null;
+}
+
+function updateRoomLabel(index) {
+    const room = getRoomForFrame(index);
+    const el   = document.getElementById("room-label");
+    if (room) { el.textContent = `${room.icon || "🏠"} ${room.name}`; el.style.display = "block"; }
+    else      { el.style.display = "none"; }
+}
+
+// ── Annotation panel ──────────────────────────────────────────────────────────
+
+function updateAnnotationPanel(index) {
+    const anns  = annotations.filter(a => a.frame_index === index);
+    const panel = document.getElementById("ann-panel");
+    if (anns.length === 0) { panel.style.display = "none"; return; }
+    const ann = anns[0];
+    const typeLabels = { info:"ℹ️ Info", feature:"⭐ Feature", upgrade:"✨ Upgrade", caution:"⚠️ Caution" };
+    document.getElementById("ann-title").textContent = ann.title || "";
+    document.getElementById("ann-body").textContent  = ann.body  || "";
+    document.getElementById("ann-type").textContent  = typeLabels[ann.type] || "";
+    panel.style.display = "block";
+}
+
+// ── Autoplay ──────────────────────────────────────────────────────────────────
+
+function togglePlay() { isPlaying ? stopPlay() : startPlay(); }
+
+function startPlay() {
+    if (current === frameURLs.length - 1) setFrame(0);
+    isPlaying = true;
+    document.getElementById("play-btn").innerHTML = "&#9646;&#9646;";
+    playTimer = setInterval(() => {
+        const nb = getNeighbors(current);
+        if (nb.forward !== undefined) goTo(nb.forward, 1);
+        else stopPlay();
+    }, 2200);
+}
+
+function stopPlay() {
+    clearInterval(playTimer);
+    isPlaying = false;
+    document.getElementById("play-btn").innerHTML = "&#9654;";
+}
+
+// ── Touch drag ────────────────────────────────────────────────────────────────
+
+let touchStartX = 0, touchStartY = 0, dragX = 0, isDragging = false;
+
+document.getElementById("viewer").addEventListener("touchstart", e => {
+    touchStartX = e.touches[0].clientX; touchStartY = e.touches[0].clientY;
+    dragX = 0; isDragging = true; stopPlay();
+    imgCurrent.style.transition = "none";
+}, { passive: true });
+
+document.getElementById("viewer").addEventListener("touchmove", e => {
+    if (!isDragging) return;
+    dragX = e.touches[0].clientX - touchStartX;
+    const dragY = e.touches[0].clientY - touchStartY;
+    if (Math.abs(dragX) < Math.abs(dragY)) return;
+    const ratio = dragX / window.innerWidth;
+    const scale = 1 - Math.abs(ratio) * 0.04;
+    imgCurrent.style.transform = `scale(${scale}) translateX(${dragX * 0.45}px)`;
+    const nb = getNeighbors(current);
+    if (dragX < 0 && nb.forward !== undefined) {
+        imgNext.src = frameURLs[nb.forward]; imgNext.style.transition = "none";
+        imgNext.style.opacity = String(Math.min(Math.abs(ratio) * 1.8, 0.9));
+        imgNext.style.transform = `scale(1.03) translateX(${20 + dragX * 0.15}px)`;
+    } else if (dragX > 0 && nb.back !== undefined) {
+        imgNext.src = frameURLs[nb.back]; imgNext.style.transition = "none";
+        imgNext.style.opacity = String(Math.min(Math.abs(ratio) * 1.8, 0.9));
+        imgNext.style.transform = `scale(1.03) translateX(${-20 + dragX * 0.15}px)`;
+    }
+}, { passive: true });
+
+document.getElementById("viewer").addEventListener("touchend", () => {
+    if (!isDragging) return;
+    isDragging = false;
+    const threshold = window.innerWidth * 0.22;
+    const nb = getNeighbors(current);
+    if      (dragX < -threshold && nb.forward !== undefined) goTo(nb.forward,  1);
+    else if (dragX >  threshold && nb.back    !== undefined) goTo(nb.back,    -1);
+    else {
+        imgCurrent.style.transition = "transform 0.3s cubic-bezier(0.34,1.56,0.64,1), opacity 0.3s ease";
+        imgCurrent.style.transform  = "scale(1) translateX(0px)";
+        imgNext.style.transition    = "opacity 0.25s ease";
+        imgNext.style.opacity       = "0";
+    }
+}, { passive: true });
+
+// ── Mouse drag ────────────────────────────────────────────────────────────────
+
+let mouseStartX = 0, mouseDragX = 0, isMouseDragging = false;
+
+document.getElementById("viewer").addEventListener("mousedown", e => {
+    mouseStartX = e.clientX; mouseDragX = 0;
+    isMouseDragging = true; stopPlay();
+    imgCurrent.style.transition = "none";
+});
+
+document.addEventListener("mousemove", e => {
+    if (!isMouseDragging) return;
+    mouseDragX = e.clientX - mouseStartX;
+    const ratio = mouseDragX / window.innerWidth;
+    const scale = 1 - Math.abs(ratio) * 0.03;
+    imgCurrent.style.transform = `scale(${scale}) translateX(${mouseDragX * 0.4}px)`;
+    const nb = getNeighbors(current);
+    if (mouseDragX < 0 && nb.forward !== undefined) {
+        imgNext.src = frameURLs[nb.forward]; imgNext.style.transition = "none";
+        imgNext.style.opacity = String(Math.min(Math.abs(ratio) * 1.8, 0.9));
+        imgNext.style.transform = `scale(1.03) translateX(${20 + mouseDragX * 0.15}px)`;
+    } else if (mouseDragX > 0 && nb.back !== undefined) {
+        imgNext.src = frameURLs[nb.back]; imgNext.style.transition = "none";
+        imgNext.style.opacity = String(Math.min(Math.abs(ratio) * 1.8, 0.9));
+        imgNext.style.transform = `scale(1.03) translateX(${-20 + mouseDragX * 0.15}px)`;
+    }
+});
+
+document.addEventListener("mouseup", () => {
+    if (!isMouseDragging) return;
+    isMouseDragging = false;
+    const threshold = window.innerWidth * 0.18;
+    const nb = getNeighbors(current);
+    if      (mouseDragX < -threshold && nb.forward !== undefined) goTo(nb.forward,  1);
+    else if (mouseDragX >  threshold && nb.back    !== undefined) goTo(nb.back,    -1);
+    else {
+        imgCurrent.style.transition = "transform 0.3s cubic-bezier(0.34,1.56,0.64,1)";
+        imgCurrent.style.transform  = "scale(1) translateX(0px)";
+        imgNext.style.opacity       = "0";
+    }
+});
+
+// ── Keyboard ──────────────────────────────────────────────────────────────────
+
+document.addEventListener("keydown", e => {
+    if      (e.key === "ArrowRight") moveInDirection("forward");
+    else if (e.key === "ArrowLeft")  moveInDirection("back");
+    else if (e.key === "ArrowUp")    moveInDirection("forward");
+    else if (e.key === "ArrowDown")  moveInDirection("back");
+    else if (e.key === " ")          { e.preventDefault(); togglePlay(); }
+    else if (e.key === "d")          toggleDebug();
+});
+
+// ── Debug ─────────────────────────────────────────────────────────────────────
+
+function toggleDebug() {
+    const el = document.getElementById("debug");
+    el.style.display = el.style.display === "block" ? "none" : "block";
+}
+
+function updateDebug() {
+    const el = document.getElementById("debug");
+    if (el.style.display !== "block") return;
+    const nb = getNeighbors(current);
+    el.textContent =
+        `frame: ${current} / ${frameURLs.length - 1}\n` +
+        `graph: ${hasGraph ? "yes" : "fallback"}\n` +
+        `neighbors: ${JSON.stringify(nb)}\n` +
+        `session: ${SESSION_ID}`;
+}
+
+// ── UI updates ────────────────────────────────────────────────────────────────
+
+function updateUI() {
+    document.getElementById("progress").textContent = `${current + 1} / ${frameURLs.length}`;
+    updateDots();
+    renderHotspots();
+    updateDebug();
+    updateRoomLabel(current);
+    updateAnnotationPanel(current);
+}
+
+function buildDots() {
+    const container = document.getElementById("dots");
+    container.innerHTML = "";
+    frameURLs.forEach((_, i) => {
+        const d = document.createElement("div");
+        d.className = "dot";
+        d.onclick = () => { stopPlay(); goTo(i, i > current ? 1 : -1); };
+        container.appendChild(d);
+    });
+}
+
+function updateDots() {
+    document.querySelectorAll(".dot").forEach((d, i) => {
+        d.classList.toggle("active", i === current);
+    });
+}
+
+function clamp(val, min, max) { return Math.max(min, Math.min(max, val)); }
+
+loadSession();
+</script>
 </body>
 </html>

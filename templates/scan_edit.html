@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Edit Scan — Renderable</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg: #0a0a0a; --surface: #141414; --surface2: #1c1c1c;
+            --border: rgba(255,255,255,0.08); --text: #f0f0f0;
+            --muted: rgba(255,255,255,0.45); --accent: #4f8ef7;
+            --danger: #e05252; --green: #4caf7d; --radius: 12px;
+        }
+        body { background: var(--bg); color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            min-height: 100vh; padding-bottom: 80px; }
+
+        header {
+            padding: 18px 20px; border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; gap: 14px;
+            position: sticky; top: 0; background: var(--bg); z-index: 10;
+        }
+        header a { color: var(--muted); text-decoration: none; font-size: 13px;
+            background: rgba(255,255,255,0.07); padding: 4px 10px;
+            border-radius: 20px; border: 1px solid var(--border); }
+        header h1 { font-size: 17px; font-weight: 600; flex: 1; }
+        header .scan-id { font-size: 11px; color: var(--muted); font-family: monospace; }
+
+        .tabs {
+            display: flex; border-bottom: 1px solid var(--border);
+            padding: 0 20px; position: sticky; top: 57px;
+            background: var(--bg); z-index: 9;
+        }
+        .tab {
+            padding: 12px 18px; font-size: 14px; font-weight: 500;
+            color: var(--muted); cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: color 0.2s, border-color 0.2s;
+        }
+        .tab.active { color: var(--text); border-bottom-color: var(--accent); }
+
+        .tab-panel { display: none; padding: 20px; max-width: 640px; margin: 0 auto; }
+        .tab-panel.active { display: block; }
+
+        .section-label {
+            font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.25);
+            text-transform: uppercase; letter-spacing: 1px;
+            padding-bottom: 4px; border-bottom: 1px solid var(--border);
+            margin-bottom: 16px;
+        }
+        label { font-size: 12px; font-weight: 600; color: var(--muted);
+            text-transform: uppercase; letter-spacing: 0.6px; }
+        input, textarea, select {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 10px; padding: 10px 12px; color: var(--text);
+            font-size: 14px; outline: none; width: 100%; font-family: inherit;
+            transition: border-color 0.2s;
+        }
+        input:focus, textarea:focus, select:focus { border-color: var(--accent); }
+        input::placeholder, textarea::placeholder { color: var(--muted); }
+        textarea { resize: vertical; min-height: 70px; }
+        select option { background: #1a1a1a; }
+
+        .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+        .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+        .btn {
+            padding: 10px 16px; border-radius: 8px; border: 1px solid var(--border);
+            background: rgba(255,255,255,0.06); color: var(--text);
+            font-size: 13px; font-weight: 500; cursor: pointer;
+            transition: background 0.15s; display: inline-flex;
+            align-items: center; gap: 6px; text-decoration: none;
+        }
+        .btn:hover { background: rgba(255,255,255,0.12); }
+        .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+        .btn-primary:hover { background: #6a9ff8; }
+        .btn-danger { color: var(--danger); }
+        .btn-danger:hover { background: rgba(224,82,82,0.12); border-color: var(--danger); }
+        .btn-sm { padding: 6px 12px; font-size: 12px; }
+        .btn-full { width: 100%; justify-content: center; }
+
+        .room-card {
+            background: var(--surface2); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 14px 16px;
+            margin-bottom: 10px; display: flex; flex-direction: column; gap: 10px;
+        }
+        .room-card-header {
+            display: flex; align-items: center; gap: 10px; justify-content: space-between;
+        }
+        .room-icon-input {
+            width: 42px !important; text-align: center; font-size: 18px; padding: 6px;
+        }
+
+        .ann-card {
+            background: var(--surface2); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 14px 16px; margin-bottom: 10px;
+        }
+        .ann-card-header {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 10px;
+        }
+        .ann-type-badge {
+            font-size: 11px; font-weight: 600; padding: 3px 8px;
+            border-radius: 20px; border: 1px solid;
+        }
+        .type-info     { color: #4f8ef7; border-color: #4f8ef7; }
+        .type-upgrade  { color: #4caf7d; border-color: #4caf7d; }
+        .type-caution  { color: #f7a34f; border-color: #f7a34f; }
+        .type-feature  { color: #c47ff7; border-color: #c47ff7; }
+
+        .frame-thumb {
+            width: 56px; height: 40px; object-fit: cover;
+            border-radius: 6px; background: #222; flex-shrink: 0;
+        }
+
+        .status-bar {
+            font-size: 13px; color: var(--muted); text-align: center;
+            padding: 10px; min-height: 38px; transition: color 0.2s;
+        }
+        .status-bar.ok    { color: var(--green); }
+        .status-bar.error { color: var(--danger); }
+
+        .spinner {
+            display: inline-block; width: 14px; height: 14px;
+            border: 2px solid rgba(255,255,255,0.1);
+            border-top-color: var(--accent); border-radius: 50%;
+            animation: spin 0.75s linear infinite;
+            vertical-align: middle; margin-right: 4px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .add-btn-row { display: flex; justify-content: flex-end; margin-bottom: 14px; }
+        .empty-hint { text-align: center; color: var(--muted); font-size: 13px;
+            padding: 32px 0; }
+
+        #frame-strip {
+            display: flex; gap: 6px; overflow-x: auto; padding: 8px 0;
+            scrollbar-width: none; margin-bottom: 14px;
+        }
+        #frame-strip::-webkit-scrollbar { display: none; }
+        .fstrip-img {
+            width: 60px; height: 44px; object-fit: cover; border-radius: 6px;
+            border: 2px solid transparent; cursor: pointer; flex-shrink: 0;
+            transition: border-color 0.15s;
+        }
+        .fstrip-img.selected { border-color: var(--accent); }
+
+        /* ── Export section ── */
+        .export-section {
+            max-width: 640px; margin: 32px auto 0; padding: 0 20px 60px;
+        }
+        .export-grid {
+            display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px;
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <a href="/scans">← Library</a>
+    <h1 id="page-title">Edit Scan</h1>
+    <span class="scan-id" id="scan-id-label"></span>
+</header>
+
+<div class="tabs">
+    <div class="tab active" onclick="switchTab('rooms')">🏠 Rooms</div>
+    <div class="tab" onclick="switchTab('annotations')">📌 Annotations</div>
+</div>
+
+<div class="tab-panel active" id="tab-rooms">
+    <div class="add-btn-row">
+        <button class="btn btn-primary btn-sm" onclick="addRoom()">+ Add Room</button>
+    </div>
+    <div id="rooms-list"></div>
+    <div class="status-bar" id="rooms-status"></div>
+    <button class="btn btn-primary btn-full" onclick="saveRooms()">Save Rooms</button>
+</div>
+
+<div class="tab-panel" id="tab-annotations">
+    <p class="section-label" style="margin-bottom:12px">Select frame to annotate</p>
+    <div id="frame-strip"></div>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:16px" id="selected-frame-label">No frame selected</p>
+    <div class="add-btn-row">
+        <button class="btn btn-primary btn-sm" onclick="addAnnotation()">+ Add Annotation</button>
+    </div>
+    <div id="annotations-list"></div>
+    <div class="status-bar" id="ann-status"></div>
+    <button class="btn btn-primary btn-full" onclick="saveAnnotations()">Save Annotations</button>
+</div>
+
+<!-- ── Export section ── -->
+<div class="export-section">
+    <div class="section-label">Export & Download</div>
+    <div class="export-grid">
+        <a class="btn" id="export-zip">📦 Download Tour Package</a>
+        <a class="btn" id="export-pdf">📄 Download PDF Report</a>
+        <a class="btn" id="export-leads">👤 Export Leads (CSV)</a>
+        <a class="btn" id="export-analytics">📊 Export Analytics (JSON)</a>
+    </div>
+</div>
+
+<script>
+const SCAN_ID = "{{ scan_id }}";
+let manifest     = null;
+let rooms        = [];
+let annotations  = [];
+let frameCount   = 0;
+let frameURLs    = [];
+let selectedFrame = 0;
+
+async function init() {
+    const res = await fetch(`/api/manifest/${SCAN_ID}`);
+    manifest  = await res.json();
+
+    frameCount  = manifest.frame_count || 0;
+    frameURLs   = manifest.frameURLs   || [];
+    rooms       = manifest.rooms       || [];
+    annotations = manifest.annotations || [];
+
+    document.getElementById("page-title").textContent = manifest.scan_name || SCAN_ID;
+    document.getElementById("scan-id-label").textContent = SCAN_ID;
+
+    // Wire export links
+    document.getElementById("export-zip").href       = `/scan/${SCAN_ID}/export`;
+    document.getElementById("export-pdf").href       = `/scan/${SCAN_ID}/export/report`;
+    document.getElementById("export-leads").href     = `/scan/${SCAN_ID}/export/leads`;
+    document.getElementById("export-analytics").href = `/scan/${SCAN_ID}/export/analytics`;
+
+    renderRooms();
+    buildFrameStrip();
+    renderAnnotations();
+}
+
+function switchTab(name) {
+    document.querySelectorAll(".tab").forEach((t, i) => {
+        t.classList.toggle("active", ["rooms","annotations"][i] === name);
+    });
+    document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+    document.getElementById(`tab-${name}`).classList.add("active");
+}
+
+function renderRooms() {
+    const list = document.getElementById("rooms-list");
+    list.innerHTML = "";
+    if (rooms.length === 0) {
+        list.innerHTML = `<p class="empty-hint">No rooms yet. Add rooms to label sections of your tour.</p>`;
+        return;
+    }
+    rooms.forEach((room, i) => {
+        const card = document.createElement("div");
+        card.className = "room-card";
+        card.innerHTML = `
+            <div class="room-card-header">
+                <input class="room-icon-input" type="text" value="${esc(room.icon || '🏠')}"
+                    placeholder="🏠" maxlength="2"
+                    oninput="rooms[${i}].icon = this.value">
+                <input style="flex:1" type="text" value="${esc(room.name || '')}"
+                    placeholder="Room name e.g. Living Room"
+                    oninput="rooms[${i}].name = this.value">
+                <button class="btn btn-sm btn-danger" onclick="removeRoom(${i})">✕</button>
+            </div>
+            <div class="row-2">
+                <div class="field">
+                    <label>Start Frame</label>
+                    <input type="number" min="0" max="${frameCount - 1}"
+                        value="${room.start_frame ?? 0}"
+                        oninput="rooms[${i}].start_frame = parseInt(this.value) || 0">
+                </div>
+                <div class="field">
+                    <label>End Frame</label>
+                    <input type="number" min="0" max="${frameCount - 1}"
+                        value="${room.end_frame ?? 0}"
+                        oninput="rooms[${i}].end_frame = parseInt(this.value) || 0">
+                </div>
+            </div>
+            <p style="font-size:11px;color:var(--muted)">
+                Frames ${room.start_frame ?? 0} – ${room.end_frame ?? 0}
+                (${Math.max(0, (room.end_frame ?? 0) - (room.start_frame ?? 0) + 1)} frames)
+            </p>
+        `;
+        list.appendChild(card);
+    });
+}
+
+function addRoom() {
+    const lastEnd = rooms.length > 0 ? (rooms[rooms.length-1].end_frame ?? 0) + 1 : 0;
+    rooms.push({
+        id: crypto.randomUUID().slice(0,8),
+        name: "",
+        icon: "🏠",
+        start_frame: lastEnd,
+        end_frame: Math.min(lastEnd + 3, frameCount - 1)
+    });
+    renderRooms();
+}
+
+function removeRoom(i) {
+    rooms.splice(i, 1);
+    renderRooms();
+}
+
+async function saveRooms() {
+    setStatus("rooms-status", "saving");
+    try {
+        const res = await fetch(`/api/scans/${SCAN_ID}/rooms`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(rooms)
+        });
+        if (!res.ok) throw new Error("Save failed");
+        setStatus("rooms-status", "ok", "✓ Rooms saved");
+    } catch(e) {
+        setStatus("rooms-status", "error", "Failed: " + e.message);
+    }
+}
+
+function buildFrameStrip() {
+    const strip = document.getElementById("frame-strip");
+    strip.innerHTML = "";
+    frameURLs.forEach((url, i) => {
+        const img = document.createElement("img");
+        img.className = "fstrip-img" + (i === 0 ? " selected" : "");
+        img.src = url;
+        img.title = `Frame ${i}`;
+        img.onclick = () => selectFrame(i);
+        strip.appendChild(img);
+    });
+    updateFrameLabel();
+}
+
+function selectFrame(i) {
+    selectedFrame = i;
+    document.querySelectorAll(".fstrip-img").forEach((img, j) => {
+        img.classList.toggle("selected", j === i);
+    });
+    updateFrameLabel();
+}
+
+function updateFrameLabel() {
+    const annsForFrame = annotations.filter(a => a.frame_index === selectedFrame);
+    document.getElementById("selected-frame-label").textContent =
+        `Frame ${selectedFrame} selected — ${annsForFrame.length} annotation${annsForFrame.length !== 1 ? "s" : ""}`;
+}
+
+function renderAnnotations() {
+    const list = document.getElementById("annotations-list");
+    list.innerHTML = "";
+    if (annotations.length === 0) {
+        list.innerHTML = `<p class="empty-hint">No annotations yet. Select a frame above and add one.</p>`;
+        updateFrameLabel();
+        return;
+    }
+    const sorted = [...annotations].map((a, origIdx) => ({ ...a, origIdx }))
+        .sort((a, b) => a.frame_index - b.frame_index);
+
+    sorted.forEach(ann => {
+        const i = ann.origIdx;
+        const thumbURL = frameURLs[ann.frame_index] || "";
+        const typeClass = `type-${ann.type || "info"}`;
+        const card = document.createElement("div");
+        card.className = "ann-card";
+        card.innerHTML = `
+            <div class="ann-card-header">
+                <div style="display:flex;align-items:center;gap:10px">
+                    <img class="frame-thumb" src="${thumbURL}" alt="frame ${ann.frame_index}">
+                    <div>
+                        <div style="font-size:12px;color:var(--muted)">Frame ${ann.frame_index}</div>
+                        <span class="ann-type-badge ${typeClass}">${ann.type || "info"}</span>
+                    </div>
+                </div>
+                <button class="btn btn-sm btn-danger" onclick="removeAnnotation(${i})">✕</button>
+            </div>
+            <div class="field">
+                <label>Title</label>
+                <input type="text" value="${esc(ann.title || '')}" placeholder="e.g. Updated kitchen"
+                    oninput="annotations[${i}].title = this.value">
+            </div>
+            <div class="field">
+                <label>Note</label>
+                <textarea placeholder="Optional details..."
+                    oninput="annotations[${i}].body = this.value">${esc(ann.body || '')}</textarea>
+            </div>
+            <div class="field">
+                <label>Type</label>
+                <select onchange="annotations[${i}].type = this.value">
+                    <option value="info"    ${ann.type==="info"    ?"selected":""}>ℹ️ Info</option>
+                    <option value="feature" ${ann.type==="feature" ?"selected":""}>⭐ Feature</option>
+                    <option value="upgrade" ${ann.type==="upgrade" ?"selected":""}>✨ Upgrade</option>
+                    <option value="caution" ${ann.type==="caution" ?"selected":""}>⚠️ Caution</option>
+                </select>
+            </div>
+        `;
+        list.appendChild(card);
+    });
+    updateFrameLabel();
+}
+
+function addAnnotation() {
+    annotations.push({
+        id: crypto.randomUUID().slice(0,8),
+        frame_index: selectedFrame,
+        title: "",
+        body: "",
+        type: "info"
+    });
+    renderAnnotations();
+    document.getElementById("annotations-list").lastElementChild?.scrollIntoView({ behavior: "smooth" });
+}
+
+function removeAnnotation(i) {
+    annotations.splice(i, 1);
+    renderAnnotations();
+}
+
+async function saveAnnotations() {
+    setStatus("ann-status", "saving");
+    try {
+        const res = await fetch(`/api/scans/${SCAN_ID}/annotations`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(annotations)
+        });
+        if (!res.ok) throw new Error("Save failed");
+        setStatus("ann-status", "ok", "✓ Annotations saved");
+    } catch(e) {
+        setStatus("ann-status", "error", "Failed: " + e.message);
+    }
+}
+
+function setStatus(id, type, msg) {
+    const el = document.getElementById(id);
+    if (type === "saving") {
+        el.innerHTML = '<span class="spinner"></span> Saving...';
+        el.className = "status-bar";
+    } else {
+        el.textContent = msg || "";
+        el.className = `status-bar ${type}`;
+        setTimeout(() => { el.textContent = ""; el.className = "status-bar"; }, 3000);
+    }
+}
+
+function esc(str) {
+    return String(str)
+        .replace(/&/g, "&amp;").replace(/"/g, "&quot;")
+        .replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+init();
+</script>
+</body>
+</html>

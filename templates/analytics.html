@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Analytics — Renderable</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg: #0a0a0a; --surface: #141414; --surface2: #1c1c1c;
+            --border: rgba(255,255,255,0.08); --text: #f0f0f0;
+            --muted: rgba(255,255,255,0.45); --accent: #4f8ef7;
+            --green: #4caf7d; --orange: #f7a34f; --radius: 12px;
+        }
+        body { background: var(--bg); color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            min-height: 100vh; padding-bottom: 60px; }
+
+        header { padding: 18px 20px; border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; gap: 14px;
+            position: sticky; top: 0; background: var(--bg); z-index: 10; }
+        header a { color: var(--muted); text-decoration: none; font-size: 13px;
+            background: rgba(255,255,255,0.07); padding: 4px 10px;
+            border-radius: 20px; border: 1px solid var(--border); }
+        header h1 { font-size: 17px; font-weight: 600; flex: 1; }
+        header .scan-id { font-size: 11px; color: var(--muted); font-family: monospace; }
+
+        .page { max-width: 720px; margin: 0 auto; padding: 24px 20px; }
+
+        /* ── Stat cards ── */
+        .stat-grid { display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 12px; margin-bottom: 28px; }
+        .stat-card { background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 16px; }
+        .stat-value { font-size: 28px; font-weight: 700; line-height: 1; margin-bottom: 4px; }
+        .stat-label { font-size: 12px; color: var(--muted); }
+        .stat-card.accent .stat-value { color: var(--accent); }
+        .stat-card.green  .stat-value { color: var(--green); }
+        .stat-card.orange .stat-value { color: var(--orange); }
+
+        /* ── Section ── */
+        .section { margin-bottom: 28px; }
+        .section-title { font-size: 13px; font-weight: 600; color: var(--muted);
+            text-transform: uppercase; letter-spacing: 0.8px;
+            margin-bottom: 12px; padding-bottom: 6px;
+            border-bottom: 1px solid var(--border); }
+
+        /* ── Activity chart ── */
+        #activity-chart { display: flex; align-items: flex-end; gap: 6px;
+            height: 80px; padding: 4px 0; }
+        .bar-wrap { flex: 1; display: flex; flex-direction: column;
+            align-items: center; gap: 4px; height: 100%; justify-content: flex-end; }
+        .bar { width: 100%; background: var(--accent); border-radius: 3px 3px 0 0;
+            min-height: 2px; transition: height 0.4s ease; opacity: 0.8; }
+        .bar-label { font-size: 9px; color: var(--muted); white-space: nowrap; }
+
+        /* ── Frame table ── */
+        .frame-row { display: flex; align-items: center; gap: 12px;
+            padding: 10px 0; border-bottom: 1px solid var(--border); }
+        .frame-row:last-child { border-bottom: none; }
+        .frame-thumb { width: 56px; height: 40px; object-fit: cover;
+            border-radius: 6px; background: #222; flex-shrink: 0; }
+        .frame-info { flex: 1; min-width: 0; }
+        .frame-index { font-size: 13px; font-weight: 600; }
+        .frame-room  { font-size: 11px; color: var(--muted); }
+        .frame-bar-wrap { width: 120px; }
+        .frame-bar-track { height: 6px; background: rgba(255,255,255,0.08);
+            border-radius: 3px; overflow: hidden; }
+        .frame-bar-fill  { height: 100%; background: var(--accent); border-radius: 3px; }
+        .frame-views { font-size: 12px; color: var(--muted); text-align: right;
+            min-width: 36px; }
+
+        /* ── Room table ── */
+        .room-row { display: flex; align-items: center; gap: 10px;
+            padding: 10px 0; border-bottom: 1px solid var(--border); }
+        .room-row:last-child { border-bottom: none; }
+        .room-icon { font-size: 20px; width: 32px; text-align: center; }
+        .room-name { flex: 1; font-size: 14px; font-weight: 500; }
+        .room-views { font-size: 12px; color: var(--muted); }
+
+        /* ── Empty state ── */
+        .empty { text-align: center; padding: 48px 20px; color: var(--muted); }
+        .empty-icon { font-size: 40px; opacity: 0.3; margin-bottom: 12px; }
+        .empty h3  { font-size: 16px; font-weight: 600; margin-bottom: 6px;
+            color: var(--text); opacity: 0.6; }
+        .empty p   { font-size: 13px; }
+
+        /* ── Loading ── */
+        #loading { display: flex; align-items: center; justify-content: center;
+            min-height: 40vh; gap: 12px; color: var(--muted); font-size: 14px; }
+        .spinner { width: 20px; height: 20px;
+            border: 2px solid rgba(255,255,255,0.1); border-top-color: var(--accent);
+            border-radius: 50%; animation: spin 0.75s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+<header>
+    <a href="/scans">← Library</a>
+    <h1 id="page-title">Analytics</h1>
+    <span class="scan-id" id="scan-id-label"></span>
+</header>
+
+<div id="loading">
+    <div class="spinner"></div>
+    Loading analytics...
+</div>
+
+<div id="main" class="hidden">
+    <div class="page">
+
+        <!-- Stat cards -->
+        <div class="stat-grid" id="stat-grid"></div>
+
+        <!-- Activity chart -->
+        <div class="section">
+            <div class="section-title">Activity — Last 7 Days</div>
+            <div id="activity-chart"></div>
+        </div>
+
+        <!-- Most viewed frames -->
+        <div class="section" id="frames-section">
+            <div class="section-title">Most Viewed Frames</div>
+            <div id="frames-list"></div>
+        </div>
+
+        <!-- Most viewed rooms -->
+        <div class="section hidden" id="rooms-section">
+            <div class="section-title">Room Engagement</div>
+            <div id="rooms-list"></div>
+        </div>
+
+    </div>
+</div>
+
+<script>
+const SCAN_ID = "{{ scan_id }}";
+let frameURLs = [];
+let manifest  = null;
+
+async function load() {
+    try {
+        // Load manifest for frame thumbnails + room data
+        const mRes = await fetch(`/api/manifest/${SCAN_ID}`);
+        manifest   = await mRes.json();
+        frameURLs  = manifest.frameURLs || [];
+
+        document.getElementById("page-title").textContent =
+            (manifest.scan_name || SCAN_ID) + " — Analytics";
+        document.getElementById("scan-id-label").textContent = SCAN_ID;
+
+        // Load analytics
+        const aRes = await fetch(`/api/analytics/${SCAN_ID}`);
+        const data = await aRes.json();
+
+        document.getElementById("loading").style.display = "none";
+        document.getElementById("main").classList.remove("hidden");
+
+        if (data.empty) {
+            renderEmpty();
+            return;
+        }
+
+        renderStats(data);
+        renderActivityChart(data.recent_activity || []);
+        renderFrames(data.most_viewed_frames || []);
+        renderRooms(data.most_viewed_rooms || []);
+
+    } catch (e) {
+        document.getElementById("loading").innerHTML =
+            `<span style="color:#e05252">Failed to load: ${e.message}</span>`;
+    }
+}
+
+function renderEmpty() {
+    document.getElementById("stat-grid").innerHTML = "";
+    document.querySelector(".page").innerHTML = `
+        <div class="empty">
+            <div class="empty-icon">📊</div>
+            <h3>No analytics yet</h3>
+            <p>Share your tour link and come back once people start viewing it.</p>
+        </div>
+    `;
+}
+
+function renderStats(data) {
+    const stats = [
+        { label: "Share Views",     value: data.total_share_views,    cls: "accent" },
+        { label: "Viewer Opens",    value: data.total_viewer_opens,   cls: "green"  },
+        { label: "Unique Sessions", value: data.unique_sessions,      cls: ""       },
+        { label: "Avg Duration",    value: fmtDuration(data.avg_session_duration_sec), cls: "orange" },
+        { label: "Avg Frames",      value: data.avg_frames_per_session, cls: "" },
+    ];
+    const grid = document.getElementById("stat-grid");
+    grid.innerHTML = stats.map(s => `
+        <div class="stat-card ${s.cls}">
+            <div class="stat-value">${s.value}</div>
+            <div class="stat-label">${s.label}</div>
+        </div>
+    `).join("");
+}
+
+function renderActivityChart(activity) {
+    const chart = document.getElementById("activity-chart");
+    chart.innerHTML = "";
+    const max = Math.max(...activity.map(d => d.events), 1);
+    activity.forEach(d => {
+        const pct = Math.round((d.events / max) * 100);
+        const label = d.date.slice(5); // MM-DD
+        const wrap = document.createElement("div");
+        wrap.className = "bar-wrap";
+        wrap.title = `${d.date}: ${d.events} events`;
+        wrap.innerHTML = `
+            <div class="bar" style="height:${Math.max(pct, 2)}%"></div>
+            <div class="bar-label">${label}</div>
+        `;
+        chart.appendChild(wrap);
+    });
+}
+
+function renderFrames(frames) {
+    const list = document.getElementById("frames-list");
+    if (frames.length === 0) {
+        list.innerHTML = `<p style="color:var(--muted);font-size:13px;padding:12px 0">No frame data yet.</p>`;
+        return;
+    }
+    const maxViews = frames[0].views;
+    const rooms    = manifest.rooms || [];
+
+    list.innerHTML = frames.map(f => {
+        const pct      = Math.round((f.views / maxViews) * 100);
+        const thumbURL = frameURLs[f.frame_index] || "";
+        const room     = rooms.find(r =>
+            f.frame_index >= (r.start_frame ?? 0) && f.frame_index <= (r.end_frame ?? 0)
+        );
+        return `
+            <div class="frame-row">
+                <img class="frame-thumb" src="${thumbURL}" alt="frame ${f.frame_index}">
+                <div class="frame-info">
+                    <div class="frame-index">Frame ${f.frame_index}</div>
+                    <div class="frame-room">${room ? `${room.icon || "🏠"} ${room.name}` : ""}</div>
+                </div>
+                <div class="frame-bar-wrap">
+                    <div class="frame-bar-track">
+                        <div class="frame-bar-fill" style="width:${pct}%"></div>
+                    </div>
+                </div>
+                <div class="frame-views">${f.views}</div>
+            </div>
+        `;
+    }).join("");
+}
+
+function renderRooms(rooms) {
+    if (rooms.length === 0) return;
+    document.getElementById("rooms-section").classList.remove("hidden");
+    const list = document.getElementById("rooms-list");
+    const manifestRooms = manifest.rooms || [];
+
+    list.innerHTML = rooms.map(r => {
+        const meta = manifestRooms.find(m => m.name === r.room_name) || {};
+        return `
+            <div class="room-row">
+                <div class="room-icon">${meta.icon || "🏠"}</div>
+                <div class="room-name">${esc(r.room_name)}</div>
+                <div class="room-views">${r.views} views</div>
+            </div>
+        `;
+    }).join("");
+}
+
+function fmtDuration(sec) {
+    if (!sec) return "0s";
+    if (sec < 60) return `${sec}s`;
+    return `${Math.floor(sec / 60)}m ${sec % 60}s`;
+}
+
+function esc(str) {
+    return String(str)
+        .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+load();
+</script>
+</body>
+</html>

@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Renderable</title>
+
+    <meta property="og:type"        content="website">
+    <meta property="og:title"       id="og-title"  content="Renderable Property Tour">
+    <meta property="og:description" id="og-desc"   content="Virtual walkthrough powered by Renderable">
+    <meta property="og:image"       id="og-image"  content="">
+
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg: #0c0c0c; --surface: #161616;
+            --border: rgba(255,255,255,0.08); --text: #f0f0f0;
+            --muted: rgba(255,255,255,0.45); --accent: #4f8ef7;
+            --green: #4caf7d; --radius: 14px;
+        }
+        body { background: var(--bg); color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            min-height: 100vh; }
+
+        #hero { position: relative; width: 100%; aspect-ratio: 16/9;
+            max-height: 480px; overflow: hidden; background: #111; }
+        #hero-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        #hero-placeholder { display: none; width: 100%; height: 100%;
+            align-items: center; justify-content: center;
+            font-size: 60px; color: rgba(255,255,255,0.08); }
+        #hero-overlay { position: absolute; inset: 0;
+            background: linear-gradient(to bottom, transparent 40%, rgba(0,0,0,0.7)); }
+        #hero-cta { position: absolute; bottom: 24px; left: 50%;
+            transform: translateX(-50%); background: var(--accent); color: #fff;
+            border: none; padding: 14px 32px; border-radius: 50px; font-size: 16px;
+            font-weight: 600; cursor: pointer; white-space: nowrap;
+            text-decoration: none; display: flex; align-items: center; gap: 8px;
+            box-shadow: 0 4px 20px rgba(79,142,247,0.4); transition: transform 0.15s; }
+        #hero-cta:active { transform: translateX(-50%) scale(0.96); }
+
+        #content { max-width: 640px; margin: 0 auto; padding: 0 20px 60px; }
+
+        #title-block { padding: 24px 0 20px; border-bottom: 1px solid var(--border); }
+        #listing-title { font-size: 26px; font-weight: 700; line-height: 1.2; margin-bottom: 6px; }
+        #listing-subtitle { font-size: 15px; color: var(--muted); }
+        #listing-address { margin-top: 8px; font-size: 14px; color: var(--muted);
+            display: flex; align-items: center; gap: 5px; }
+
+        #facts { display: flex; gap: 10px; flex-wrap: wrap;
+            padding: 20px 0; border-bottom: 1px solid var(--border); }
+        .fact-chip { background: var(--surface); border: 1px solid var(--border);
+            border-radius: 8px; padding: 8px 14px; font-size: 13px; color: var(--text);
+            display: flex; align-items: center; gap: 6px; }
+        .fact-chip span { color: var(--muted); font-size: 12px; }
+
+        #description-block { padding: 20px 0; border-bottom: 1px solid var(--border); }
+        #description-block h3 { font-size: 13px; font-weight: 600; color: var(--muted);
+            text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 10px; }
+        #listing-description { font-size: 15px; line-height: 1.65;
+            color: rgba(255,255,255,0.75); }
+
+        #tour-btn-wrap { padding: 24px 0; border-bottom: 1px solid var(--border); }
+        #tour-btn { display: flex; align-items: center; justify-content: center;
+            gap: 10px; width: 100%; padding: 16px; background: var(--accent);
+            color: #fff; border: none; border-radius: var(--radius);
+            font-size: 16px; font-weight: 600; cursor: pointer;
+            text-decoration: none; transition: opacity 0.15s; }
+        #tour-btn:active { opacity: 0.85; }
+
+        #rooms-block { padding: 20px 0; border-bottom: 1px solid var(--border); }
+        #rooms-block h3 { font-size: 13px; font-weight: 600; color: var(--muted);
+            text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 12px; }
+        #rooms-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+        .room-chip { display: inline-flex; align-items: center; gap: 6px;
+            padding: 8px 14px; background: var(--surface);
+            border: 1px solid var(--border); border-radius: 8px;
+            font-size: 13px; color: var(--text); text-decoration: none;
+            transition: border-color 0.2s; }
+        .room-chip:hover { border-color: rgba(255,255,255,0.2); }
+
+        #highlights-block { padding: 20px 0; border-bottom: 1px solid var(--border); }
+        #highlights-block h3 { font-size: 13px; font-weight: 600; color: var(--muted);
+            text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 12px; }
+        .highlight-item { display: flex; align-items: flex-start; gap: 10px;
+            padding: 10px 0; border-bottom: 1px solid var(--border); }
+        .highlight-item:last-child { border-bottom: none; }
+        .highlight-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+        .highlight-title { font-size: 14px; font-weight: 600; }
+        .highlight-body { font-size: 13px; color: var(--muted); margin-top: 2px; }
+
+        /* ── Inquiry CTA block ── */
+        #inquiry-block {
+            padding: 24px 0; border-bottom: 1px solid var(--border);
+        }
+        #inquiry-block h3 { font-size: 13px; font-weight: 600; color: var(--muted);
+            text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 14px; }
+        #inquiry-cta-btn {
+            width: 100%; padding: 16px; border: none; border-radius: var(--radius);
+            background: linear-gradient(135deg, #1a2a4a, #1e3560);
+            border: 1px solid rgba(79,142,247,0.3);
+            color: #fff; font-size: 16px; font-weight: 600; cursor: pointer;
+            display: flex; align-items: center; justify-content: center; gap: 10px;
+            transition: opacity 0.15s, border-color 0.2s;
+        }
+        #inquiry-cta-btn:hover { border-color: rgba(79,142,247,0.6); }
+        #inquiry-cta-btn:active { opacity: 0.85; }
+
+        #contact-block { padding: 20px 0; border-bottom: 1px solid var(--border); }
+        #contact-block h3 { font-size: 13px; font-weight: 600; color: var(--muted);
+            text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 14px; }
+        #contact-name { font-size: 16px; font-weight: 600; margin-bottom: 10px; }
+        .contact-action { display: flex; align-items: center; gap: 10px;
+            padding: 12px 16px; background: var(--surface);
+            border: 1px solid var(--border); border-radius: 10px;
+            margin-bottom: 8px; text-decoration: none; color: var(--text);
+            font-size: 14px; transition: border-color 0.2s; }
+        .contact-action:hover { border-color: rgba(255,255,255,0.2); }
+
+        #share-row { padding: 20px 0; display: flex; gap: 10px; }
+        .share-btn { flex: 1; padding: 12px; background: var(--surface);
+            border: 1px solid var(--border); border-radius: 10px;
+            color: var(--text); font-size: 13px; font-weight: 500; cursor: pointer;
+            display: flex; align-items: center; justify-content: center; gap: 6px;
+            transition: background 0.15s; }
+        .share-btn:hover { background: rgba(255,255,255,0.08); }
+
+        #footer { text-align: center; padding: 24px 20px; font-size: 12px;
+            color: rgba(255,255,255,0.2); border-top: 1px solid var(--border); }
+        #footer strong { color: rgba(255,255,255,0.35); }
+
+        /* ── Inquiry modal ── */
+        #modal-backdrop { display: none; position: fixed; inset: 0;
+            background: rgba(0,0,0,0.75); z-index: 50;
+            align-items: flex-end; justify-content: center;
+            backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
+        #modal-backdrop.visible { display: flex; }
+
+        #modal { background: #1a1a1a; border: 1px solid var(--border);
+            border-radius: 20px 20px 0 0; padding: 24px 20px 40px;
+            width: 100%; max-width: 560px; }
+
+        #modal h2 { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+        #modal .modal-sub { font-size: 13px; color: var(--muted); margin-bottom: 20px; }
+
+        .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+        .field label { font-size: 12px; font-weight: 600; color: var(--muted);
+            text-transform: uppercase; letter-spacing: 0.5px; }
+        .field input, .field textarea, .field select {
+            background: #222; border: 1px solid var(--border);
+            border-radius: 10px; padding: 11px 14px; color: var(--text);
+            font-size: 15px; outline: none; width: 100%; font-family: inherit;
+            transition: border-color 0.2s; }
+        .field input:focus, .field textarea:focus, .field select:focus {
+            border-color: var(--accent); }
+        .field input::placeholder, .field textarea::placeholder { color: var(--muted); }
+        .field textarea { resize: vertical; min-height: 80px; }
+        .field select option { background: #1a1a1a; }
+
+        /* Honeypot — visually hidden */
+        .hp-field { position: absolute; left: -9999px; opacity: 0;
+            pointer-events: none; tab-index: -1; }
+
+        #modal-error { font-size: 13px; color: #e05252;
+            margin-bottom: 10px; min-height: 18px; }
+
+        #submit-btn { width: 100%; padding: 15px; background: var(--accent);
+            color: #fff; border: none; border-radius: var(--radius);
+            font-size: 16px; font-weight: 600; cursor: pointer;
+            transition: opacity 0.15s; }
+        #submit-btn:disabled { opacity: 0.5; cursor: default; }
+        #submit-btn:not(:disabled):active { opacity: 0.85; }
+
+        #modal-success { display: none; text-align: center; padding: 20px 0; }
+        #modal-success .success-icon { font-size: 48px; margin-bottom: 12px; }
+        #modal-success h3 { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
+        #modal-success p  { font-size: 14px; color: var(--muted); }
+
+        #modal-close { position: absolute; top: 16px; right: 20px;
+            background: none; border: none; color: var(--muted);
+            font-size: 22px; cursor: pointer; line-height: 1; }
+
+        /* ── Toast / loading ── */
+        #toast { position: fixed; bottom: 24px; left: 50%;
+            transform: translateX(-50%) translateY(20px);
+            background: #1e1e1e; border: 1px solid var(--border);
+            color: var(--text); padding: 10px 20px; border-radius: 20px;
+            font-size: 13px; opacity: 0; transition: opacity 0.3s, transform 0.3s;
+            z-index: 100; white-space: nowrap; }
+        #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+        #loading { display: flex; align-items: center; justify-content: center;
+            min-height: 60vh; gap: 12px; color: var(--muted); font-size: 14px; }
+        .spinner { width: 20px; height: 20px;
+            border: 2px solid rgba(255,255,255,0.1); border-top-color: var(--accent);
+            border-radius: 50%; animation: spin 0.75s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+<div id="loading">
+    <div class="spinner"></div>
+    Loading property...
+</div>
+
+<div id="main" class="hidden">
+
+    <div id="hero">
+        <img id="hero-img" src="" alt="Property thumbnail">
+        <div id="hero-placeholder">🏠</div>
+        <div id="hero-overlay"></div>
+        <a id="hero-cta" href="#">▶ Start Virtual Tour</a>
+    </div>
+
+    <div id="content">
+
+        <div id="title-block">
+            <h1 id="listing-title">Property Tour</h1>
+            <p id="listing-subtitle"></p>
+            <p id="listing-address"></p>
+        </div>
+
+        <div id="facts"></div>
+
+        <div id="description-block" class="hidden">
+            <h3>About this property</h3>
+            <p id="listing-description"></p>
+        </div>
+
+        <div id="tour-btn-wrap">
+            <a id="tour-btn" href="#">▶&nbsp; Open Virtual Tour</a>
+        </div>
+
+        <div id="rooms-block" class="hidden">
+            <h3>Rooms & Areas</h3>
+            <div id="rooms-chips"></div>
+        </div>
+
+        <div id="highlights-block" class="hidden">
+            <h3>Highlights</h3>
+            <div id="highlights-list"></div>
+        </div>
+
+        <!-- Inquiry CTA -->
+        <div id="inquiry-block">
+            <h3>Interested?</h3>
+            <button id="inquiry-cta-btn" onclick="openInquiry()">
+                📩 Request a Viewing / Ask a Question
+            </button>
+        </div>
+
+        <div id="contact-block" class="hidden">
+            <h3>Contact</h3>
+            <p id="contact-name"></p>
+            <a id="contact-email-btn" class="contact-action hidden" href="#">
+                ✉️ <span id="contact-email-text"></span>
+            </a>
+            <a id="contact-phone-btn" class="contact-action hidden" href="#">
+                📞 <span id="contact-phone-text"></span>
+            </a>
+        </div>
+
+        <div id="share-row">
+            <button class="share-btn" onclick="copyLink()">🔗 Copy Link</button>
+            <button class="share-btn" onclick="nativeShare()">↗ Share</button>
+        </div>
+
+    </div>
+
+    <div id="footer">
+        Virtual tour powered by <strong>Renderable</strong>
+    </div>
+
+</div>
+
+<!-- Inquiry modal -->
+<div id="modal-backdrop">
+    <div id="modal" style="position:relative">
+        <button id="modal-close" onclick="closeInquiry()">✕</button>
+
+        <div id="modal-form-wrap">
+            <h2>Send Inquiry</h2>
+            <p class="modal-sub" id="modal-sub">We'll get back to you as soon as possible.</p>
+
+            <div class="field">
+                <label>Your Name *</label>
+                <input id="f-name" type="text" placeholder="e.g. Mari Tamm" autocomplete="name">
+            </div>
+            <div class="field">
+                <label>Email *</label>
+                <input id="f-email" type="email" placeholder="e.g. mari@example.com" autocomplete="email">
+            </div>
+            <div class="field">
+                <label>Phone</label>
+                <input id="f-phone" type="tel" placeholder="+372 5555 5555" autocomplete="tel">
+            </div>
+            <div class="field">
+                <label>I want to</label>
+                <select id="f-type">
+                    <option value="request_viewing">Request a viewing</option>
+                    <option value="ask_question">Ask a question</option>
+                    <option value="contact_me">Ask agent to contact me</option>
+                    <option value="general">General inquiry</option>
+                </select>
+            </div>
+            <div class="field">
+                <label>Message</label>
+                <textarea id="f-message" placeholder="Any questions or notes..."></textarea>
+            </div>
+
+            <!-- Honeypot -->
+            <div class="hp-field" aria-hidden="true">
+                <input id="f-website" type="text" name="website" tabindex="-1" autocomplete="off">
+            </div>
+
+            <div id="modal-error"></div>
+            <button id="submit-btn" onclick="submitInquiry()">Send Inquiry</button>
+        </div>
+
+        <div id="modal-success">
+            <div class="success-icon">✅</div>
+            <h3>Inquiry Sent!</h3>
+            <p>Thank you. We'll be in touch with you shortly.</p>
+        </div>
+    </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const SCAN_ID  = "{{ scan_id }}";
+const BASE_URL = window.location.origin;
+
+// ── Analytics ─────────────────────────────────────────────────────────────────
+
+const SESSION_ID = Math.random().toString(36).slice(2, 10);
+
+function track(eventType, extra = {}) {
+    fetch("/analytics/event", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            scan_id: SCAN_ID, session_id: SESSION_ID,
+            event_type: eventType, source_page: "share", ...extra
+        })
+    }).catch(() => {});
+}
+
+track("share_view");
+
+// ── Load ──────────────────────────────────────────────────────────────────────
+
+const TYPE_ICONS = { info: "ℹ️", feature: "⭐", upgrade: "✨", caution: "⚠️" };
+
+async function loadSharePage() {
+    try {
+        const res = await fetch(`/api/manifest/${SCAN_ID}`);
+        if (!res.ok) throw new Error(`Server error ${res.status}`);
+        const manifest = await res.json();
+        if (manifest.error) throw new Error(manifest.error);
+
+        const listing   = manifest.listing || {};
+        const viewerURL = `/view/${SCAN_ID}`;
+
+        const title = listing.listing_title || manifest.scan_name || "Property Tour";
+        document.title = `${title} — Renderable`;
+        document.getElementById("listing-title").textContent = title;
+        document.querySelector("#og-title").setAttribute("content", title);
+
+        // Hero
+        if (manifest.thumbnailURL) {
+            const img = document.getElementById("hero-img");
+            img.src = manifest.thumbnailURL;
+            img.onerror = () => {
+                img.style.display = "none";
+                document.getElementById("hero-placeholder").style.display = "flex";
+            };
+            document.querySelector("#og-image").setAttribute("content",
+                BASE_URL + manifest.thumbnailURL);
+        } else {
+            document.getElementById("hero-img").style.display = "none";
+            document.getElementById("hero-placeholder").style.display = "flex";
+        }
+
+        const heroCta = document.getElementById("hero-cta");
+        const tourBtn = document.getElementById("tour-btn");
+        heroCta.href = viewerURL;
+        tourBtn.href  = viewerURL;
+        heroCta.addEventListener("click", () => track("viewer_open"));
+        tourBtn.addEventListener("click",  () => track("viewer_open"));
+
+        // Subtitle / address
+        const elSub  = document.getElementById("listing-subtitle");
+        const elAddr = document.getElementById("listing-address");
+        if (listing.listing_subtitle) elSub.textContent = listing.listing_subtitle;
+        else elSub.style.display = "none";
+        if (listing.address) elAddr.innerHTML = `📍 ${esc(listing.address)}`;
+        else elAddr.style.display = "none";
+
+        // Facts
+        const facts = [];
+        if (listing.property_type) facts.push({ icon: "🏠", label: listing.property_type });
+        if (listing.room_count > 0) facts.push({ icon: "🚪", label: `${listing.room_count} rooms` });
+        if (listing.area_sqm   > 0) facts.push({ icon: "📐", label: `${listing.area_sqm} m²` });
+        facts.push({ icon: "📷", label: `${manifest.frame_count} frames` });
+        const factsEl = document.getElementById("facts");
+        facts.forEach(f => {
+            const chip = document.createElement("div");
+            chip.className = "fact-chip";
+            chip.innerHTML = `${f.icon} <span>${esc(f.label)}</span>`;
+            factsEl.appendChild(chip);
+        });
+
+        // Description
+        if (listing.description) {
+            document.getElementById("listing-description").textContent = listing.description;
+            document.getElementById("description-block").classList.remove("hidden");
+        }
+
+        // Rooms
+        const rooms = manifest.rooms || [];
+        if (rooms.length > 0) {
+            const chipsEl = document.getElementById("rooms-chips");
+            rooms.forEach(room => {
+                const chip = document.createElement("a");
+                chip.className = "room-chip";
+                chip.href = viewerURL;
+                chip.textContent = `${room.icon || "🏠"} ${room.name}`;
+                chipsEl.appendChild(chip);
+            });
+            document.getElementById("rooms-block").classList.remove("hidden");
+        }
+
+        // Highlights
+        const annotations = (manifest.annotations || []).filter(a => a.title);
+        if (annotations.length > 0) {
+            const hlList = document.getElementById("highlights-list");
+            annotations.slice(0, 5).forEach(ann => {
+                const item = document.createElement("div");
+                item.className = "highlight-item";
+                item.innerHTML = `
+                    <span class="highlight-icon">${TYPE_ICONS[ann.type] || "ℹ️"}</span>
+                    <div>
+                        <div class="highlight-title">${esc(ann.title)}</div>
+                        ${ann.body ? `<div class="highlight-body">${esc(ann.body)}</div>` : ""}
+                    </div>`;
+                hlList.appendChild(item);
+            });
+            document.getElementById("highlights-block").classList.remove("hidden");
+        }
+
+        // Contact
+        const hasContact = listing.contact_name || listing.contact_email || listing.contact_phone;
+        if (hasContact) {
+            document.getElementById("contact-block").classList.remove("hidden");
+            if (listing.contact_name)
+                document.getElementById("contact-name").textContent = listing.contact_name;
+            if (listing.contact_email) {
+                const btn = document.getElementById("contact-email-btn");
+                btn.href = `mailto:${listing.contact_email}`;
+                document.getElementById("contact-email-text").textContent = listing.contact_email;
+                btn.classList.remove("hidden");
+                btn.addEventListener("click", () => track("contact_click", { meta: { type: "email" } }));
+            }
+            if (listing.contact_phone) {
+                const btn = document.getElementById("contact-phone-btn");
+                btn.href = `tel:${listing.contact_phone}`;
+                document.getElementById("contact-phone-text").textContent = listing.contact_phone;
+                btn.classList.remove("hidden");
+                btn.addEventListener("click", () => track("contact_click", { meta: { type: "phone" } }));
+            }
+            // Personalise modal sub-text
+            if (listing.contact_name) {
+                document.getElementById("modal-sub").textContent =
+                    `${listing.contact_name} will get back to you as soon as possible.`;
+            }
+        }
+
+        document.getElementById("loading").style.display = "none";
+        document.getElementById("main").classList.remove("hidden");
+
+    } catch (e) {
+        document.getElementById("loading").innerHTML =
+            `<span style="color:#e05252">Failed to load: ${e.message}</span>`;
+    }
+}
+
+// ── Inquiry modal ─────────────────────────────────────────────────────────────
+
+function openInquiry() {
+    document.getElementById("modal-backdrop").classList.add("visible");
+    document.getElementById("modal-form-wrap").style.display = "block";
+    document.getElementById("modal-success").style.display = "none";
+    document.getElementById("modal-error").textContent = "";
+    track("lead_form_opened");
+}
+
+function closeInquiry() {
+    document.getElementById("modal-backdrop").classList.remove("visible");
+}
+
+async function submitInquiry() {
+    const name    = document.getElementById("f-name").value.trim();
+    const email   = document.getElementById("f-email").value.trim();
+    const phone   = document.getElementById("f-phone").value.trim();
+    const type    = document.getElementById("f-type").value;
+    const message = document.getElementById("f-message").value.trim();
+    const website = document.getElementById("f-website").value; // honeypot
+    const errEl   = document.getElementById("modal-error");
+    const btn     = document.getElementById("submit-btn");
+
+    errEl.textContent = "";
+
+    if (!name)  { errEl.textContent = "Please enter your name."; return; }
+    if (!email) { errEl.textContent = "Please enter your email."; return; }
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+        errEl.textContent = "Please enter a valid email."; return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = "Sending...";
+
+    try {
+        const res = await fetch(`/scan/${SCAN_ID}/lead`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                full_name:    name,
+                email:        email,
+                phone:        phone,
+                message:      message,
+                inquiry_type: type,
+                source_page:  "share",
+                session_id:   SESSION_ID,
+                website:      website  // honeypot
+            })
+        });
+
+        if (!res.ok) {
+            const data = await res.json();
+            throw new Error(data.error || "Submission failed");
+        }
+
+        // Success
+        track("lead_submitted", { meta: { inquiry_type: type } });
+        document.getElementById("modal-form-wrap").style.display = "none";
+        document.getElementById("modal-success").style.display = "block";
+
+    } catch (e) {
+        errEl.textContent = e.message || "Something went wrong. Please try again.";
+        btn.disabled = false;
+        btn.textContent = "Send Inquiry";
+    }
+}
+
+// Close on backdrop click
+document.getElementById("modal-backdrop").addEventListener("click", e => {
+    if (e.target === document.getElementById("modal-backdrop")) closeInquiry();
+});
+
+document.addEventListener("keydown", e => {
+    if (e.key === "Escape") closeInquiry();
+});
+
+// ── Share ─────────────────────────────────────────────────────────────────────
+
+function copyLink() {
+    track("copy_link");
+    const url = `${BASE_URL}/share/${SCAN_ID}`;
+    navigator.clipboard.writeText(url)
+        .then(() => showToast("Link copied!"))
+        .catch(() => showToast(url));
+}
+
+function nativeShare() {
+    const url   = `${BASE_URL}/share/${SCAN_ID}`;
+    const title = document.getElementById("listing-title").textContent;
+    if (navigator.share) navigator.share({ title, url }).catch(() => {});
+    else copyLink();
+}
+
+function showToast(msg) {
+    const t = document.getElementById("toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    setTimeout(() => t.classList.remove("show"), 2500);
+}
+
+function esc(str) {
+    return String(str)
+        .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+loadSharePage();
+</script>
+</body>
+</html>
