@@ -129,6 +129,15 @@
             transition: background 0.2s, color 0.2s, border-color 0.2s; }
         .room-chip.active { background: rgba(62,207,142,0.18);
             border-color: rgba(62,207,142,0.5); color: #3ecf8e; }
+
+        /* ── Compass HUD ── */
+        #compass { position: absolute; top: 70px; right: 16px; z-index: 20;
+            font-size: 11px; font-family: monospace; font-weight: 600;
+            color: rgba(255,255,255,0.5); background: rgba(0,0,0,0.45);
+            backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+            border: 1px solid rgba(255,255,255,0.12);
+            padding: 4px 10px; border-radius: 20px;
+            pointer-events: none; display: none; letter-spacing: 0.3px; }
     </style>
 </head>
 <body>
@@ -165,6 +174,7 @@
 </div>
 
 <div id="room-label"></div>
+<div id="compass"></div>
 <div id="ann-panel">
     <div id="ann-title"></div>
     <div id="ann-body"></div>
@@ -406,16 +416,48 @@ function moveInDirection(dir) {
     if (nb[dir] !== undefined) goTo(nb[dir], dir);
 }
 
+// ── Heading helpers ───────────────────────────────────────────────────────────
+
+function angleToScreenPosition(angle) {
+    const rad = angle * Math.PI / 180;
+    let x = 50 + Math.sin(rad) * 30;
+    let y = 50 - Math.cos(rad) * 30;
+    x = Math.max(12, Math.min(88, x));
+    y = Math.max(15, Math.min(82, y));
+    return { left: x + "%", top: y + "%" };
+}
+
+function iconForAngle(angle) {
+    const a = ((angle % 360) + 360) % 360;
+    if (a < 45 || a >= 315) return HOTSPOT_ICONS.forward;
+    if (a < 135)            return HOTSPOT_ICONS.right;
+    if (a < 225)            return HOTSPOT_ICONS.back;
+    return HOTSPOT_ICONS.left;
+}
+
 // ── Hotspots ──────────────────────────────────────────────────────────────────
 
 function renderHotspots() {
     const container = document.getElementById("hotspots");
     container.innerHTML = "";
     const nb = getNeighbors(current);
-    const currentRoom = getRoomForFrame(current);
+    const currentRoom    = getRoomForFrame(current);
+    const currentHeading = frameObjects[current]?.heading;
+
     Object.entries(nb).forEach(([dir, targetIndex]) => {
-        const pos = HOTSPOT_POSITIONS[dir];
-        if (!pos) return;
+        const targetHeading = frameObjects[targetIndex]?.heading;
+        const useHeading    = currentHeading != null && targetHeading != null;
+
+        let pos, icon;
+        if (useHeading) {
+            const relAngle = ((targetHeading - currentHeading) + 360) % 360;
+            pos  = angleToScreenPosition(relAngle);
+            icon = iconForAngle(relAngle);
+        } else {
+            pos  = HOTSPOT_POSITIONS[dir];
+            icon = HOTSPOT_ICONS[dir] || "";
+            if (!pos) return;
+        }
 
         const targetRoom   = getRoomForFrame(targetIndex);
         const enteringRoom = targetRoom && (!currentRoom || targetRoom.name !== currentRoom.name);
@@ -430,7 +472,7 @@ function renderHotspots() {
         const ring = document.createElement("div");
         ring.className = "hotspot-ring";
         ring.style.cssText = `width:${ringSize}px;height:${ringSize}px;opacity:${ringOpacity}`;
-        ring.innerHTML = HOTSPOT_ICONS[dir] || "";
+        ring.innerHTML = icon;
         hotspot.appendChild(ring);
 
         if (enteringRoom) {
@@ -444,6 +486,19 @@ function renderHotspots() {
         hotspot.addEventListener("touchend", e => { e.stopPropagation(); moveInDirection(dir); });
         container.appendChild(hotspot);
     });
+}
+
+// ── Compass ───────────────────────────────────────────────────────────────────
+
+function updateCompass(index) {
+    const el    = document.getElementById("compass");
+    const frame = frameObjects[index];
+    if (!frame || frame.heading == null) { el.style.display = "none"; return; }
+    const h        = Math.round(frame.heading);
+    const cardinals = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+    const cardinal  = cardinals[Math.round(h / 45) % 8];
+    el.textContent  = `${cardinal} ${h}°`;
+    el.style.display = "block";
 }
 
 // ── Room label ────────────────────────────────────────────────────────────────
@@ -603,9 +658,11 @@ function updateDebug() {
     const el = document.getElementById("debug");
     if (el.style.display !== "block") return;
     const nb = getNeighbors(current);
+    const heading = frameObjects[current]?.heading;
     el.textContent =
         `frame: ${current} / ${frameURLs.length - 1}\n` +
         `graph: ${hasGraph ? "yes" : "fallback"}\n` +
+        `heading: ${heading != null ? Math.round(heading) + "°" : "—"}\n` +
         `neighbors: ${JSON.stringify(nb)}\n` +
         `session: ${SESSION_ID}`;
 }
@@ -617,6 +674,7 @@ function updateUI() {
     updateDots();
     updateRoomStrip(current);
     renderHotspots();
+    updateCompass(current);
     updateDebug();
     updateRoomLabel(current);
     updateAnnotationPanel(current);
