@@ -23,17 +23,25 @@ def save_manifest(scan_id, manifest):
     with open(path, "w") as f: json.dump(manifest, f, indent=2)
 
 def scan_summary(scan_id, manifest):
-    thumbnail = manifest.get("thumbnail_filename")
-    listing   = manifest.get("listing", {})
+    thumbnail    = manifest.get("thumbnail_filename")
+    listing      = manifest.get("listing", {})
+    frames       = manifest.get("frames", [])
+    total_frames = manifest.get("frame_count", 0)
+    dict_frames   = [f for f in frames if isinstance(f, dict)]
+    active_frames = (
+        sum(1 for f in dict_frames if not f.get("discarded", False))
+        if dict_frames else total_frames
+    )
     return {
-        "scan_id":       scan_id,
-        "scan_name":     manifest.get("scan_name") or scan_id,
-        "created_at":    manifest.get("created_at", ""),
-        "frame_count":   manifest.get("frame_count", 0),
-        "thumbnail_url": f"/uploads/{scan_id}/frames/{thumbnail}" if thumbnail else None,
-        "viewer_url":    f"/view/{scan_id}",
-        "share_url":     f"/share/{scan_id}",
-        "listing":       listing
+        "scan_id":            scan_id,
+        "scan_name":          manifest.get("scan_name") or scan_id,
+        "created_at":         manifest.get("created_at", ""),
+        "frame_count":        total_frames,
+        "active_frame_count": active_frames,
+        "thumbnail_url":      f"/uploads/{scan_id}/frames/{thumbnail}" if thumbnail else None,
+        "viewer_url":         f"/view/{scan_id}",
+        "share_url":          f"/share/{scan_id}",
+        "listing":            listing
     }
 
 def analytics_path(scan_id):
