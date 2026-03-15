@@ -7,9 +7,9 @@
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         :root {
-            --bg: #0a0a0a; --surface: #141414;
+            --bg: #0a0a0a; --surface: #141414; --surface2: #1c1c1c;
             --border: rgba(255,255,255,0.08); --text: #f0f0f0;
-            --muted: rgba(255,255,255,0.45); --accent: #4f8ef7;
+            --muted: rgba(255,255,255,0.45); --accent: #3ecf8e;
             --danger: #e05252; --radius: 12px;
         }
         body { background: var(--bg); color: var(--text);
@@ -20,7 +20,7 @@
             display: flex; align-items: center; justify-content: space-between;
             position: sticky; top: 0; background: var(--bg); z-index: 10;
             backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
-        header h1 { font-size: 20px; font-weight: 700; letter-spacing: 0.5px; }
+        header h1 { font-size: 17px; font-weight: 600; letter-spacing: 0.3px; }
         header span { font-size: 12px; color: var(--muted);
             background: rgba(255,255,255,0.07); padding: 4px 10px;
             border-radius: 20px; border: 1px solid var(--border); }
@@ -40,13 +40,13 @@
         .card { background: var(--surface); border: 1px solid var(--border);
             border-radius: var(--radius); overflow: hidden;
             transition: border-color 0.2s, transform 0.15s; }
-        .card:hover { border-color: rgba(255,255,255,0.18); transform: translateY(-2px); }
+        .card:hover { border-color: rgba(255,255,255,0.2); }
 
         .card-thumb-wrap { position: relative; }
         .card-thumb { width: 100%; aspect-ratio: 16/9; object-fit: cover;
-            display: block; background: #1a1a1a; }
+            display: block; background: var(--surface2); }
         .card-thumb-placeholder { width: 100%; aspect-ratio: 16/9;
-            background: linear-gradient(135deg, #1a1a1a, #222);
+            background: var(--surface2);
             display: flex; align-items: center; justify-content: center;
             font-size: 36px; color: rgba(255,255,255,0.12); }
 
@@ -73,8 +73,8 @@
             text-decoration: none; display: flex; align-items: center;
             justify-content: center; gap: 4px; min-width: 0; }
         .btn:hover { background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.2); }
-        .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-        .btn-primary:hover { background: #6a9ff8; border-color: #6a9ff8; }
+        .btn-primary { background: var(--accent); border-color: var(--accent); color: #000; }
+        .btn-primary:hover { background: #52d9a2; border-color: #52d9a2; }
         .btn-danger:hover { background: rgba(224,82,82,0.15);
             border-color: var(--danger); color: var(--danger); }
 
@@ -96,8 +96,8 @@
             background: rgba(0,0,0,0.7); z-index: 50;
             align-items: center; justify-content: center; backdrop-filter: blur(4px); }
         #modal-backdrop.visible { display: flex; }
-        #modal { background: #1c1c1c; border: 1px solid var(--border);
-            border-radius: 16px; padding: 24px; width: min(360px, 90vw);
+        #modal { background: var(--surface2); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 24px; width: min(360px, 90vw);
             display: flex; flex-direction: column; gap: 16px; }
         #modal h3 { font-size: 17px; font-weight: 600; }
         #modal input { background: var(--surface); border: 1px solid var(--border);
@@ -108,7 +108,7 @@
 
         #toast { position: fixed; bottom: 24px; left: 50%;
             transform: translateX(-50%) translateY(20px);
-            background: #1e1e1e; border: 1px solid var(--border);
+            background: var(--surface); border: 1px solid var(--border);
             color: var(--text); padding: 10px 20px; border-radius: 20px;
             font-size: 13px; opacity: 0; transition: opacity 0.3s, transform 0.3s;
             z-index: 100; white-space: nowrap; }

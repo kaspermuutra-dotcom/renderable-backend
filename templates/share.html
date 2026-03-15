@@ -14,9 +14,9 @@
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         :root {
-            --bg: #0a0a0a; --surface: #141414;
+            --bg: #0a0a0a; --surface: #141414; --surface2: #1c1c1c;
             --border: rgba(255,255,255,0.08); --text: #f0f0f0;
-            --muted: rgba(255,255,255,0.45); --accent: #4f8ef7;
+            --muted: rgba(255,255,255,0.45); --accent: #3ecf8e;
             --green: #4caf7d; --radius: 12px;
         }
         body { background: var(--bg); color: var(--text);
@@ -32,11 +32,11 @@
         #hero-overlay { position: absolute; inset: 0;
             background: linear-gradient(to bottom, transparent 40%, rgba(0,0,0,0.7)); }
         #hero-cta { position: absolute; bottom: 24px; left: 50%;
-            transform: translateX(-50%); background: var(--accent); color: #fff;
+            transform: translateX(-50%); background: var(--accent); color: #000;
             border: none; padding: 14px 32px; border-radius: 50px; font-size: 16px;
             font-weight: 600; cursor: pointer; white-space: nowrap;
             text-decoration: none; display: flex; align-items: center; gap: 8px;
-            box-shadow: 0 4px 20px rgba(79,142,247,0.4); transition: transform 0.15s; }
+            box-shadow: 0 4px 20px rgba(62,207,142,0.35); transition: transform 0.15s; }
         #hero-cta:active { transform: translateX(-50%) scale(0.96); }
 
         #content { max-width: 640px; margin: 0 auto; padding: 0 20px 60px; }
@@ -55,7 +55,7 @@
         .fact-chip span { color: var(--muted); font-size: 12px; }
 
         #description-block { padding: 20px 0; border-bottom: 1px solid var(--border); }
-        #description-block h3 { font-size: 13px; font-weight: 600; color: var(--muted);
+        #description-block h3 { font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.4);
             text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 10px; }
         #listing-description { font-size: 15px; line-height: 1.65;
             color: rgba(255,255,255,0.75); }
@@ -63,13 +63,13 @@
         #tour-btn-wrap { padding: 24px 0; border-bottom: 1px solid var(--border); }
         #tour-btn { display: flex; align-items: center; justify-content: center;
             gap: 10px; width: 100%; padding: 16px; background: var(--accent);
-            color: #fff; border: none; border-radius: var(--radius);
+            color: #000; border: none; border-radius: var(--radius);
             font-size: 16px; font-weight: 600; cursor: pointer;
             text-decoration: none; transition: opacity 0.15s; }
         #tour-btn:active { opacity: 0.85; }
 
         #rooms-block { padding: 20px 0; border-bottom: 1px solid var(--border); }
-        #rooms-block h3 { font-size: 13px; font-weight: 600; color: var(--muted);
+        #rooms-block h3 { font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.4);
             text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 12px; }
         #rooms-chips { display: flex; flex-wrap: wrap; gap: 8px; }
         .room-chip { display: inline-flex; align-items: center; gap: 6px;
@@ -80,7 +80,7 @@
         .room-chip:hover { border-color: rgba(255,255,255,0.2); }
 
         #highlights-block { padding: 20px 0; border-bottom: 1px solid var(--border); }
-        #highlights-block h3 { font-size: 13px; font-weight: 600; color: var(--muted);
+        #highlights-block h3 { font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.4);
             text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 12px; }
         .highlight-item { display: flex; align-items: flex-start; gap: 10px;
             padding: 10px 0; border-bottom: 1px solid var(--border); }
@@ -93,21 +93,21 @@
         #inquiry-block {
             padding: 24px 0; border-bottom: 1px solid var(--border);
         }
-        #inquiry-block h3 { font-size: 13px; font-weight: 600; color: var(--muted);
+        #inquiry-block h3 { font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.4);
             text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 14px; }
         #inquiry-cta-btn {
-            width: 100%; padding: 16px; border: none; border-radius: var(--radius);
-            background: linear-gradient(135deg, #1a2a4a, #1e3560);
-            border: 1px solid rgba(79,142,247,0.3);
-            color: #fff; font-size: 16px; font-weight: 600; cursor: pointer;
+            width: 100%; padding: 16px; border-radius: var(--radius);
+            background: var(--surface);
+            border: 1px solid rgba(62,207,142,0.35);
+            color: var(--text); font-size: 16px; font-weight: 600; cursor: pointer;
             display: flex; align-items: center; justify-content: center; gap: 10px;
             transition: opacity 0.15s, border-color 0.2s;
         }
-        #inquiry-cta-btn:hover { border-color: rgba(79,142,247,0.6); }
+        #inquiry-cta-btn:hover { border-color: rgba(62,207,142,0.65); }
         #inquiry-cta-btn:active { opacity: 0.85; }
 
         #contact-block { padding: 20px 0; border-bottom: 1px solid var(--border); }
-        #contact-block h3 { font-size: 13px; font-weight: 600; color: var(--muted);
+        #contact-block h3 { font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.4);
             text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 14px; }
         #contact-name { font-size: 16px; font-weight: 600; margin-bottom: 10px; }
         .contact-action { display: flex; align-items: center; gap: 10px;
@@ -136,8 +136,8 @@
             backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
         #modal-backdrop.visible { display: flex; }
 
-        #modal { background: #1a1a1a; border: 1px solid var(--border);
-            border-radius: 20px 20px 0 0; padding: 24px 20px 40px;
+        #modal { background: var(--surface2); border: 1px solid var(--border);
+            border-radius: var(--radius) var(--radius) 0 0; padding: 24px 20px 40px;
             width: 100%; max-width: 560px; }
 
         #modal h2 { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
@@ -147,7 +147,7 @@
         .field label { font-size: 12px; font-weight: 600; color: var(--muted);
             text-transform: uppercase; letter-spacing: 0.5px; }
         .field input, .field textarea, .field select {
-            background: #222; border: 1px solid var(--border);
+            background: var(--surface2); border: 1px solid var(--border);
             border-radius: 10px; padding: 11px 14px; color: var(--text);
             font-size: 15px; outline: none; width: 100%; font-family: inherit;
             transition: border-color 0.2s; }
@@ -155,7 +155,7 @@
             border-color: var(--accent); }
         .field input::placeholder, .field textarea::placeholder { color: var(--muted); }
         .field textarea { resize: vertical; min-height: 80px; }
-        .field select option { background: #1a1a1a; }
+        .field select option { background: var(--surface2); }
 
         /* Honeypot — visually hidden */
         .hp-field { position: absolute; left: -9999px; opacity: 0;
@@ -165,7 +165,7 @@
             margin-bottom: 10px; min-height: 18px; }
 
         #submit-btn { width: 100%; padding: 15px; background: var(--accent);
-            color: #fff; border: none; border-radius: var(--radius);
+            color: #000; border: none; border-radius: var(--radius);
             font-size: 16px; font-weight: 600; cursor: pointer;
             transition: opacity 0.15s; }
         #submit-btn:disabled { opacity: 0.5; cursor: default; }
@@ -183,7 +183,7 @@
         /* ── Toast / loading ── */
         #toast { position: fixed; bottom: 24px; left: 50%;
             transform: translateX(-50%) translateY(20px);
-            background: #1e1e1e; border: 1px solid var(--border);
+            background: var(--surface); border: 1px solid var(--border);
             color: var(--text); padding: 10px 20px; border-radius: 20px;
             font-size: 13px; opacity: 0; transition: opacity 0.3s, transform 0.3s;
             z-index: 100; white-space: nowrap; }
@@ -215,7 +215,10 @@
             </svg>
         </div>
         <div id="hero-overlay"></div>
-        <a id="hero-cta" href="#">▶ Start Virtual Tour</a>
+        <a id="hero-cta" href="#">
+            <svg width="13" height="13" viewBox="0 0 12 12" fill="currentColor"><path d="M2.5 1.5l8 4.5-8 4.5z"/></svg>
+            Start Virtual Tour
+        </a>
     </div>
 
     <div id="content">
@@ -234,7 +237,10 @@
         </div>
 
         <div id="tour-btn-wrap">
-            <a id="tour-btn" href="#">▶&nbsp; Open Virtual Tour</a>
+            <a id="tour-btn" href="#">
+                <svg width="13" height="13" viewBox="0 0 12 12" fill="currentColor"><path d="M2.5 1.5l8 4.5-8 4.5z"/></svg>
+                Open Virtual Tour
+            </a>
         </div>
 
         <div id="rooms-block" class="hidden">

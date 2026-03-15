@@ -9,11 +9,11 @@
         :root {
             --bg: #0a0a0a; --surface: #141414; --surface2: #1c1c1c;
             --border: rgba(255,255,255,0.08); --text: #f0f0f0;
-            --muted: rgba(255,255,255,0.45); --accent: #4f8ef7;
+            --muted: rgba(255,255,255,0.45); --accent: #3ecf8e;
             --danger: #e05252; --green: #4caf7d; --radius: 12px;
         }
         body { background: var(--bg); color: var(--text);
-            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
             min-height: 100vh; padding-bottom: 80px; }
 
         header {
@@ -44,8 +44,8 @@
         .tab-panel.active { display: block; }
 
         .section-label {
-            font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.25);
-            text-transform: uppercase; letter-spacing: 1px;
+            font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.4);
+            text-transform: uppercase; letter-spacing: 0.8px;
             padding-bottom: 4px; border-bottom: 1px solid var(--border);
             margin-bottom: 16px;
         }
@@ -60,7 +60,7 @@
         input:focus, textarea:focus, select:focus { border-color: var(--accent); }
         input::placeholder, textarea::placeholder { color: var(--muted); }
         textarea { resize: vertical; min-height: 70px; }
-        select option { background: #1a1a1a; }
+        select option { background: var(--surface2); }
 
         .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
         .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -73,8 +73,8 @@
             align-items: center; gap: 6px; text-decoration: none;
         }
         .btn:hover { background: rgba(255,255,255,0.12); }
-        .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-        .btn-primary:hover { background: #6a9ff8; }
+        .btn-primary { background: var(--accent); border-color: var(--accent); color: #000; }
+        .btn-primary:hover { background: #52d9a2; }
         .btn-danger { color: var(--danger); }
         .btn-danger:hover { background: rgba(224,82,82,0.12); border-color: var(--danger); }
         .btn-sm { padding: 6px 12px; font-size: 12px; }
@@ -111,7 +111,7 @@
 
         .frame-thumb {
             width: 56px; height: 40px; object-fit: cover;
-            border-radius: 6px; background: #222; flex-shrink: 0;
+            border-radius: 6px; background: var(--surface2); flex-shrink: 0;
         }
 
         .status-bar {
@@ -313,7 +313,7 @@ async function saveRooms() {
             body: JSON.stringify(rooms)
         });
         if (!res.ok) throw new Error("Save failed");
-        setStatus("rooms-status", "ok", "✓ Rooms saved");
+        setStatus("rooms-status", "ok", "Rooms saved");
     } catch(e) {
         setStatus("rooms-status", "error", "Failed: " + e.message);
     }
@@ -426,7 +426,7 @@ async function saveAnnotations() {
             body: JSON.stringify(annotations)
         });
         if (!res.ok) throw new Error("Save failed");
-        setStatus("ann-status", "ok", "✓ Annotations saved");
+        setStatus("ann-status", "ok", "Annotations saved");
     } catch(e) {
         setStatus("ann-status", "error", "Failed: " + e.message);
     }
