@@ -114,6 +114,21 @@
         .error-icon  { color: rgba(255,255,255,0.35); }
         #error-action { margin-top: 4px; font-size: 13px; color: rgba(255,255,255,0.3);
             text-align: center; max-width: 280px; line-height: 1.5; }
+
+        /* ── Room strip ── */
+        #room-strip { position: absolute; bottom: 128px; left: 50%;
+            transform: translateX(-50%); z-index: 20;
+            display: flex; gap: 6px; align-items: center;
+            max-width: calc(100% - 40px); overflow-x: auto;
+            padding: 2px 0; scrollbar-width: none; }
+        #room-strip::-webkit-scrollbar { display: none; }
+        .room-chip { font-size: 11px; font-weight: 600; letter-spacing: 0.3px;
+            padding: 4px 12px; border-radius: 20px; cursor: pointer; white-space: nowrap;
+            background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.15);
+            color: rgba(255,255,255,0.6);
+            transition: background 0.2s, color 0.2s, border-color 0.2s; }
+        .room-chip.active { background: rgba(79,142,247,0.25);
+            border-color: rgba(79,142,247,0.5); color: #4f8ef7; }
     </style>
 </head>
 <body>
@@ -155,6 +170,7 @@
     <div id="ann-body"></div>
     <div id="ann-type"></div>
 </div>
+<div id="room-strip"></div>
 <div id="dots"></div>
 <div id="hint">Drag or tap hotspots to navigate</div>
 <div id="debug"></div>
@@ -226,7 +242,12 @@ const HOTSPOT_POSITIONS = {
     left:    { left: "18%", top: "50%" },
     right:   { left: "82%", top: "50%" }
 };
-const HOTSPOT_ICONS = { forward: "↑", back: "↓", left: "←", right: "→" };
+const HOTSPOT_ICONS = {
+    forward: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>`,
+    back:    `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>`,
+    left:    `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>`,
+    right:   `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>`
+};
 
 // ── Load ──────────────────────────────────────────────────────────────────────
 
@@ -263,6 +284,7 @@ async function loadSession() {
 
         preloadNeighbors(0, () => {
             buildDots();
+            buildRoomStrip();
             setFrame(0);
             document.getElementById("loading").style.display = "none";
             setTimeout(() => {
@@ -310,22 +332,38 @@ function setFrame(index) {
 
 // ── Animated transition ───────────────────────────────────────────────────────
 
-function goTo(index, direction = 1) {
+function goTo(index, dir = "forward") {
     if (isAnimating) return;
     const target = clamp(index, 0, frameURLs.length - 1);
     if (target === current) return;
     isAnimating = true;
 
-    const slideOut = direction > 0 ? "-7%" : "7%";
-    const slideIn  = direction > 0 ?  "5%" : "-5%";
+    // Direction-aware transform presets
+    let outTransform, inStart;
+    if (dir === "forward") {
+        outTransform = "scale(0.96) translateX(0%)";
+        inStart      = "scale(1.08) translateX(0%)";
+    } else if (dir === "back") {
+        outTransform = "scale(1.04) translateX(0%)";
+        inStart      = "scale(0.93) translateX(0%)";
+    } else if (dir === "left") {
+        outTransform = "scale(1) translateX(7%)";
+        inStart      = "scale(1) translateX(-5%)";
+    } else if (dir === "right") {
+        outTransform = "scale(1) translateX(-7%)";
+        inStart      = "scale(1) translateX(5%)";
+    } else {
+        outTransform = "scale(0.96) translateX(0%)";
+        inStart      = "scale(1.08) translateX(0%)";
+    }
 
     imgNext.src = frameURLs[target];
     imgNext.style.transition = "none";
-    imgNext.style.transform  = `scale(1.05) translateX(${slideIn})`;
+    imgNext.style.transform  = inStart;
     imgNext.style.opacity    = "0";
 
     imgCurrent.style.transition = "transform 0.38s cubic-bezier(0.4,0,0.2,1), opacity 0.32s ease";
-    imgCurrent.style.transform  = `scale(0.96) translateX(${slideOut})`;
+    imgCurrent.style.transform  = outTransform;
     imgCurrent.style.opacity    = "0";
 
     requestAnimationFrame(() => requestAnimationFrame(() => {
@@ -359,14 +397,13 @@ function getNeighbors(index) {
     return nb;
 }
 
-function next() { stopPlay(); const nb = getNeighbors(current); if (nb.forward !== undefined) goTo(nb.forward,  1); }
-function prev() { stopPlay(); const nb = getNeighbors(current); if (nb.back    !== undefined) goTo(nb.back,    -1); }
+function next() { stopPlay(); const nb = getNeighbors(current); if (nb.forward !== undefined) goTo(nb.forward, "forward"); }
+function prev() { stopPlay(); const nb = getNeighbors(current); if (nb.back    !== undefined) goTo(nb.back,    "back"); }
 
 function moveInDirection(dir) {
     stopPlay();
     const nb = getNeighbors(current);
-    if (nb[dir] !== undefined)
-        goTo(nb[dir], (dir === "forward" || dir === "right") ? 1 : -1);
+    if (nb[dir] !== undefined) goTo(nb[dir], dir);
 }
 
 // ── Hotspots ──────────────────────────────────────────────────────────────────
@@ -375,17 +412,34 @@ function renderHotspots() {
     const container = document.getElementById("hotspots");
     container.innerHTML = "";
     const nb = getNeighbors(current);
+    const currentRoom = getRoomForFrame(current);
     Object.entries(nb).forEach(([dir, targetIndex]) => {
         const pos = HOTSPOT_POSITIONS[dir];
         if (!pos) return;
+
+        const targetRoom   = getRoomForFrame(targetIndex);
+        const enteringRoom = targetRoom && (!currentRoom || targetRoom.name !== currentRoom.name);
+        const ringSize     = dir === "forward" ? 60 : (dir === "back" ? 44 : 52);
+        const ringOpacity  = dir === "back" ? "0.7" : "1";
+
         const hotspot = document.createElement("div");
         hotspot.className = "hotspot";
         hotspot.style.left = pos.left;
         hotspot.style.top  = pos.top;
-        hotspot.innerHTML  = `
-            <div class="hotspot-ring">${HOTSPOT_ICONS[dir] || "●"}</div>
-            <span class="hotspot-label">${dir}</span>
-        `;
+
+        const ring = document.createElement("div");
+        ring.className = "hotspot-ring";
+        ring.style.cssText = `width:${ringSize}px;height:${ringSize}px;opacity:${ringOpacity}`;
+        ring.innerHTML = HOTSPOT_ICONS[dir] || "";
+        hotspot.appendChild(ring);
+
+        if (enteringRoom) {
+            const lbl = document.createElement("span");
+            lbl.className = "hotspot-label";
+            lbl.textContent = targetRoom.name;
+            hotspot.appendChild(lbl);
+        }
+
         hotspot.addEventListener("click", () => moveInDirection(dir));
         hotspot.addEventListener("touchend", e => { e.stopPropagation(); moveInDirection(dir); });
         container.appendChild(hotspot);
@@ -429,7 +483,7 @@ function startPlay() {
     document.getElementById("play-btn").innerHTML = "&#9646;&#9646;";
     playTimer = setInterval(() => {
         const nb = getNeighbors(current);
-        if (nb.forward !== undefined) goTo(nb.forward, 1);
+        if (nb.forward !== undefined) goTo(nb.forward, "forward");
         else stopPlay();
     }, 2200);
 }
@@ -475,8 +529,8 @@ document.getElementById("viewer").addEventListener("touchend", () => {
     isDragging = false;
     const threshold = window.innerWidth * 0.22;
     const nb = getNeighbors(current);
-    if      (dragX < -threshold && nb.forward !== undefined) goTo(nb.forward,  1);
-    else if (dragX >  threshold && nb.back    !== undefined) goTo(nb.back,    -1);
+    if      (dragX < -threshold && nb.forward !== undefined) goTo(nb.forward, "forward");
+    else if (dragX >  threshold && nb.back    !== undefined) goTo(nb.back,    "back");
     else {
         imgCurrent.style.transition = "transform 0.3s cubic-bezier(0.34,1.56,0.64,1), opacity 0.3s ease";
         imgCurrent.style.transform  = "scale(1) translateX(0px)";
@@ -518,8 +572,8 @@ document.addEventListener("mouseup", () => {
     isMouseDragging = false;
     const threshold = window.innerWidth * 0.18;
     const nb = getNeighbors(current);
-    if      (mouseDragX < -threshold && nb.forward !== undefined) goTo(nb.forward,  1);
-    else if (mouseDragX >  threshold && nb.back    !== undefined) goTo(nb.back,    -1);
+    if      (mouseDragX < -threshold && nb.forward !== undefined) goTo(nb.forward, "forward");
+    else if (mouseDragX >  threshold && nb.back    !== undefined) goTo(nb.back,    "back");
     else {
         imgCurrent.style.transition = "transform 0.3s cubic-bezier(0.34,1.56,0.64,1)";
         imgCurrent.style.transform  = "scale(1) translateX(0px)";
@@ -561,6 +615,7 @@ function updateDebug() {
 function updateUI() {
     document.getElementById("progress").textContent = `${current + 1} / ${frameURLs.length}`;
     updateDots();
+    updateRoomStrip(current);
     renderHotspots();
     updateDebug();
     updateRoomLabel(current);
@@ -573,7 +628,7 @@ function buildDots() {
     frameURLs.forEach((_, i) => {
         const d = document.createElement("div");
         d.className = "dot";
-        d.onclick = () => { stopPlay(); goTo(i, i > current ? 1 : -1); };
+        d.onclick = () => { stopPlay(); goTo(i, i > current ? "forward" : "back"); };
         container.appendChild(d);
     });
 }
@@ -581,6 +636,28 @@ function buildDots() {
 function updateDots() {
     document.querySelectorAll(".dot").forEach((d, i) => {
         d.classList.toggle("active", i === current);
+    });
+}
+
+function buildRoomStrip() {
+    const strip = document.getElementById("room-strip");
+    strip.innerHTML = "";
+    if (rooms.length === 0) return;
+    rooms.forEach(room => {
+        const chip = document.createElement("div");
+        chip.className = "room-chip";
+        chip.textContent = room.name;
+        chip.onclick = () => { stopPlay(); setFrame(room.start_frame ?? 0); };
+        strip.appendChild(chip);
+    });
+}
+
+function updateRoomStrip(index) {
+    document.querySelectorAll(".room-chip").forEach((chip, i) => {
+        const r = rooms[i];
+        chip.classList.toggle("active",
+            r !== undefined && index >= (r.start_frame ?? 0) && index <= (r.end_frame ?? 0)
+        );
     });
 }
 
