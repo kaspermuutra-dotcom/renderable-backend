@@ -9,14 +9,15 @@
     <meta property="og:title"       id="og-title"  content="Renderable Property Tour">
     <meta property="og:description" id="og-desc"   content="Virtual walkthrough powered by Renderable">
     <meta property="og:image"       id="og-image"  content="">
+    <meta property="og:url"         id="og-url"    content="">
 
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         :root {
-            --bg: #0c0c0c; --surface: #161616;
+            --bg: #0a0a0a; --surface: #141414;
             --border: rgba(255,255,255,0.08); --text: #f0f0f0;
             --muted: rgba(255,255,255,0.45); --accent: #4f8ef7;
-            --green: #4caf7d; --radius: 14px;
+            --green: #4caf7d; --radius: 12px;
         }
         body { background: var(--bg); color: var(--text);
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -84,7 +85,7 @@
         .highlight-item { display: flex; align-items: flex-start; gap: 10px;
             padding: 10px 0; border-bottom: 1px solid var(--border); }
         .highlight-item:last-child { border-bottom: none; }
-        .highlight-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+        .highlight-icon { flex-shrink: 0; margin-top: 2px; display: flex; }
         .highlight-title { font-size: 14px; font-weight: 600; }
         .highlight-body { font-size: 13px; color: var(--muted); margin-top: 2px; }
 
@@ -171,7 +172,7 @@
         #submit-btn:not(:disabled):active { opacity: 0.85; }
 
         #modal-success { display: none; text-align: center; padding: 20px 0; }
-        #modal-success .success-icon { font-size: 48px; margin-bottom: 12px; }
+        #modal-success .success-icon { margin-bottom: 12px; color: var(--green); }
         #modal-success h3 { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
         #modal-success p  { font-size: 14px; color: var(--muted); }
 
@@ -208,7 +209,11 @@
 
     <div id="hero">
         <img id="hero-img" src="" alt="Property thumbnail">
-        <div id="hero-placeholder">🏠</div>
+        <div id="hero-placeholder">
+            <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.12;color:#fff">
+                <rect x="3" y="7" width="18" height="14" rx="1"/><path d="M3 11h18M9 7V4h6v3"/><path d="M9 15h2v6H9zM13 15h2v6h-2z"/>
+            </svg>
+        </div>
         <div id="hero-overlay"></div>
         <a id="hero-cta" href="#">▶ Start Virtual Tour</a>
     </div>
@@ -246,7 +251,7 @@
         <div id="inquiry-block">
             <h3>Interested?</h3>
             <button id="inquiry-cta-btn" onclick="openInquiry()">
-                📩 Request a Viewing / Ask a Question
+                Request a Viewing or Ask a Question
             </button>
         </div>
 
@@ -254,15 +259,20 @@
             <h3>Contact</h3>
             <p id="contact-name"></p>
             <a id="contact-email-btn" class="contact-action hidden" href="#">
-                ✉️ <span id="contact-email-text"></span>
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><rect x="2" y="4" width="12" height="9" rx="1.5"/><path d="M2 5l6 4.5L14 5"/></svg>
+                <span id="contact-email-text"></span>
             </a>
             <a id="contact-phone-btn" class="contact-action hidden" href="#">
-                📞 <span id="contact-phone-text"></span>
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M5 2h2.5l1 2.5-1.5 1a7 7 0 003.5 3.5l1-1.5L14 8.5V11a2 2 0 01-2 2 11 11 0 01-9-9 2 2 0 012-2z"/></svg>
+                <span id="contact-phone-text"></span>
             </a>
         </div>
 
         <div id="share-row">
-            <button class="share-btn" onclick="copyLink()">🔗 Copy Link</button>
+            <button class="share-btn" onclick="copyLink()">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="3" r="1.5"/><circle cx="3" cy="8" r="1.5"/><circle cx="13" cy="13" r="1.5"/><path d="M4.4 9l7.2 3M11.6 4L4.4 7"/></svg>
+                Copy Link
+            </button>
             <button class="share-btn" onclick="nativeShare()">↗ Share</button>
         </div>
 
@@ -281,7 +291,7 @@
 
         <div id="modal-form-wrap">
             <h2>Send Inquiry</h2>
-            <p class="modal-sub" id="modal-sub">We'll get back to you as soon as possible.</p>
+            <p class="modal-sub" id="modal-sub">We'll be in touch shortly.</p>
 
             <div class="field">
                 <label>Your Name *</label>
@@ -319,9 +329,11 @@
         </div>
 
         <div id="modal-success">
-            <div class="success-icon">✅</div>
-            <h3>Inquiry Sent!</h3>
-            <p>Thank you. We'll be in touch with you shortly.</p>
+            <div class="success-icon">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9 12l2 2 4-4"/></svg>
+            </div>
+            <h3>Inquiry Sent</h3>
+            <p>Thank you. We'll be in touch shortly.</p>
         </div>
     </div>
 </div>
@@ -351,7 +363,13 @@ track("share_view");
 
 // ── Load ──────────────────────────────────────────────────────────────────────
 
-const TYPE_ICONS = { info: "ℹ️", feature: "⭐", upgrade: "✨", caution: "⚠️" };
+const TYPE_ICONS = {
+    info:    `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" style="flex-shrink:0;color:#4f8ef7"><circle cx="8" cy="8" r="6.5"/><path d="M8 7.5v4M8 5.5h.01"/></svg>`,
+    feature: `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:#c47ff7"><path d="M8 1l1.8 3.6 4 .6-2.9 2.8.7 4L8 10l-3.6 1.9.7-4L2.2 5.2l4-.6z"/></svg>`,
+    upgrade: `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:#4caf7d"><path d="M8 2v9M4 6l4-4 4 4M4 13h8"/></svg>`,
+    caution: `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:#f7a34f"><path d="M8 2L1.5 13h13z"/><path d="M8 7v3M8 12h.01"/></svg>`
+};
+const PIN_ICON = `<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px"><path d="M8 1.5a4.5 4.5 0 014.5 4.5c0 3.5-4.5 8.5-4.5 8.5S3.5 9.5 3.5 6A4.5 4.5 0 018 1.5z"/><circle cx="8" cy="6" r="1.5"/></svg>`;
 
 async function loadSharePage() {
     try {
@@ -367,6 +385,7 @@ async function loadSharePage() {
         document.title = `${title} — Renderable`;
         document.getElementById("listing-title").textContent = title;
         document.querySelector("#og-title").setAttribute("content", title);
+        document.querySelector("#og-url").setAttribute("content", window.location.href);
 
         // Hero
         if (manifest.thumbnailURL) {
@@ -395,15 +414,22 @@ async function loadSharePage() {
         const elAddr = document.getElementById("listing-address");
         if (listing.listing_subtitle) elSub.textContent = listing.listing_subtitle;
         else elSub.style.display = "none";
-        if (listing.address) elAddr.innerHTML = `📍 ${esc(listing.address)}`;
+        if (listing.address) elAddr.innerHTML = `${PIN_ICON} ${esc(listing.address)}`;
         else elAddr.style.display = "none";
 
         // Facts
+        const FACT_ICON_TYPE   = `<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="12" height="10" rx="1"/><path d="M5 5V3.5A2.5 2.5 0 018 1v0a2.5 2.5 0 012.5 2.5V5"/></svg>`;
+        const FACT_ICON_ROOMS  = `<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="1.5" width="5.5" height="5.5" rx="1"/><rect x="9" y="1.5" width="5.5" height="5.5" rx="1"/><rect x="1.5" y="9" width="5.5" height="5.5" rx="1"/><rect x="9" y="9" width="5.5" height="5.5" rx="1"/></svg>`;
+        const FACT_ICON_AREA   = `<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 14V2h12M2 14h12M5 14V8h7v6"/></svg>`;
+        const FACT_ICON_FRAMES = `<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="10" rx="1.5"/><circle cx="8" cy="8" r="2.5"/><circle cx="8" cy="8" r="0.8" fill="currentColor" stroke="none"/></svg>`;
         const facts = [];
-        if (listing.property_type) facts.push({ icon: "🏠", label: listing.property_type });
-        if (listing.room_count > 0) facts.push({ icon: "🚪", label: `${listing.room_count} rooms` });
-        if (listing.area_sqm   > 0) facts.push({ icon: "📐", label: `${listing.area_sqm} m²` });
-        facts.push({ icon: "📷", label: `${manifest.frame_count} frames` });
+        if (listing.property_type) {
+            const typeLabel = listing.property_type.charAt(0).toUpperCase() + listing.property_type.slice(1).toLowerCase();
+            facts.push({ icon: FACT_ICON_TYPE, label: typeLabel });
+        }
+        if (listing.room_count > 0) facts.push({ icon: FACT_ICON_ROOMS, label: `${listing.room_count} rooms` });
+        if (listing.area_sqm   > 0) facts.push({ icon: FACT_ICON_AREA,  label: `${listing.area_sqm} m²` });
+        facts.push({ icon: FACT_ICON_FRAMES, label: `${manifest.frame_count} frames` });
         const factsEl = document.getElementById("facts");
         facts.forEach(f => {
             const chip = document.createElement("div");
@@ -426,7 +452,7 @@ async function loadSharePage() {
                 const chip = document.createElement("a");
                 chip.className = "room-chip";
                 chip.href = viewerURL;
-                chip.textContent = `${room.icon || "🏠"} ${room.name}`;
+                chip.textContent = room.name;
                 chipsEl.appendChild(chip);
             });
             document.getElementById("rooms-block").classList.remove("hidden");
@@ -440,7 +466,7 @@ async function loadSharePage() {
                 const item = document.createElement("div");
                 item.className = "highlight-item";
                 item.innerHTML = `
-                    <span class="highlight-icon">${TYPE_ICONS[ann.type] || "ℹ️"}</span>
+                    <span class="highlight-icon">${TYPE_ICONS[ann.type] || TYPE_ICONS.info}</span>
                     <div>
                         <div class="highlight-title">${esc(ann.title)}</div>
                         ${ann.body ? `<div class="highlight-body">${esc(ann.body)}</div>` : ""}
@@ -473,7 +499,7 @@ async function loadSharePage() {
             // Personalise modal sub-text
             if (listing.contact_name) {
                 document.getElementById("modal-sub").textContent =
-                    `${listing.contact_name} will get back to you as soon as possible.`;
+                    `${listing.contact_name} will be in touch shortly.`;
             }
         }
 
@@ -584,7 +610,7 @@ function showToast(msg) {
     const t = document.getElementById("toast");
     t.textContent = msg;
     t.classList.add("show");
-    setTimeout(() => t.classList.remove("show"), 2500);
+    setTimeout(() => t.classList.remove("show"), 4000);
 }
 
 function esc(str) {

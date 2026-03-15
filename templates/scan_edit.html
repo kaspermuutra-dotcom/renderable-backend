@@ -164,8 +164,8 @@
 </header>
 
 <div class="tabs">
-    <div class="tab active" onclick="switchTab('rooms')">🏠 Rooms</div>
-    <div class="tab" onclick="switchTab('annotations')">📌 Annotations</div>
+    <div class="tab active" onclick="switchTab('rooms')">Rooms</div>
+    <div class="tab" onclick="switchTab('annotations')">Annotations</div>
 </div>
 
 <div class="tab-panel active" id="tab-rooms">
@@ -193,10 +193,10 @@
 <div class="export-section">
     <div class="section-label">Export & Download</div>
     <div class="export-grid">
-        <a class="btn" id="export-zip">📦 Download Tour Package</a>
-        <a class="btn" id="export-pdf">📄 Download PDF Report</a>
-        <a class="btn" id="export-leads">👤 Export Leads (CSV)</a>
-        <a class="btn" id="export-analytics">📊 Export Analytics (JSON)</a>
+        <a class="btn" id="export-zip">Download Tour Package</a>
+        <a class="btn" id="export-pdf">Download PDF Report</a>
+        <a class="btn" id="export-leads">Export Leads (CSV)</a>
+        <a class="btn" id="export-analytics">Export Analytics (JSON)</a>
     </div>
 </div>
 
@@ -252,8 +252,8 @@ function renderRooms() {
         card.className = "room-card";
         card.innerHTML = `
             <div class="room-card-header">
-                <input class="room-icon-input" type="text" value="${esc(room.icon || '🏠')}"
-                    placeholder="🏠" maxlength="2"
+                <input class="room-icon-input" type="text" value="${esc(room.icon && !isEmoji(room.icon) ? room.icon : '')}"
+                    placeholder="—" maxlength="4"
                     oninput="rooms[${i}].icon = this.value">
                 <input style="flex:1" type="text" value="${esc(room.name || '')}"
                     placeholder="Room name e.g. Living Room"
@@ -283,12 +283,16 @@ function renderRooms() {
     });
 }
 
+function isEmoji(str) {
+    return str && /\p{Emoji}/u.test(str);
+}
+
 function addRoom() {
     const lastEnd = rooms.length > 0 ? (rooms[rooms.length-1].end_frame ?? 0) + 1 : 0;
     rooms.push({
         id: crypto.randomUUID().slice(0,8),
         name: "",
-        icon: "🏠",
+        icon: "",
         start_frame: lastEnd,
         end_frame: Math.min(lastEnd + 3, frameCount - 1)
     });
@@ -384,10 +388,10 @@ function renderAnnotations() {
             <div class="field">
                 <label>Type</label>
                 <select onchange="annotations[${i}].type = this.value">
-                    <option value="info"    ${ann.type==="info"    ?"selected":""}>ℹ️ Info</option>
-                    <option value="feature" ${ann.type==="feature" ?"selected":""}>⭐ Feature</option>
-                    <option value="upgrade" ${ann.type==="upgrade" ?"selected":""}>✨ Upgrade</option>
-                    <option value="caution" ${ann.type==="caution" ?"selected":""}>⚠️ Caution</option>
+                    <option value="info"    ${ann.type==="info"    ?"selected":""}>Info</option>
+                    <option value="feature" ${ann.type==="feature" ?"selected":""}>Feature</option>
+                    <option value="upgrade" ${ann.type==="upgrade" ?"selected":""}>Upgrade</option>
+                    <option value="caution" ${ann.type==="caution" ?"selected":""}>Caution</option>
                 </select>
             </div>
         `;

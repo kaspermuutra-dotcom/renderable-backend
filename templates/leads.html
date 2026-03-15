@@ -80,7 +80,7 @@
 
         /* ── Empty / loading ── */
         .empty { text-align: center; padding: 60px 20px; color: var(--muted); }
-        .empty-icon { font-size: 40px; opacity: 0.3; margin-bottom: 12px; }
+        .empty-icon { opacity: 0.3; margin-bottom: 12px; display: flex; justify-content: center; }
         .empty h3 { font-size: 16px; font-weight: 600; color: var(--text);
             opacity: 0.6; margin-bottom: 6px; }
         #loading { display: flex; align-items: center; justify-content: center;
@@ -183,9 +183,11 @@ function renderLeads() {
     if (leads.length === 0) {
         list.innerHTML = `
             <div class="empty">
-                <div class="empty-icon">📬</div>
+                <div class="empty-icon">
+                    <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="16" rx="2"/><path d="M2 9l10 6 10-6"/></svg>
+                </div>
                 <h3>No leads yet</h3>
-                <p>Share your property tour and leads will appear here when viewers submit inquiries.</p>
+                <p>Share your property tour link and leads will appear here when viewers submit inquiries.</p>
             </div>`;
         return;
     }
@@ -209,8 +211,8 @@ function renderLeads() {
             </div>
 
             <div class="lead-contact">
-                <a href="${emailHref}">✉️ ${esc(lead.email)}</a>
-                ${lead.phone ? `<a href="${phoneHref}">📞 ${esc(lead.phone)}</a>` : ""}
+                <a href="${emailHref}">${esc(lead.email)}</a>
+                ${lead.phone ? `<a href="${phoneHref}">${esc(lead.phone)}</a>` : ""}
                 <span class="type-chip">${esc(typeLabel)}</span>
             </div>
 
@@ -222,7 +224,7 @@ function renderLeads() {
             </div>
 
             <div class="lead-actions">
-                <a href="${emailHref}" class="btn-sm green">✉️ Reply</a>
+                <a href="${emailHref}" class="btn-sm green">Reply</a>
                 ${lead.status !== "contacted"
                     ? `<button class="btn-sm" onclick="setStatus('${lead.lead_id}', 'contacted', ${i})">✓ Mark Contacted</button>`
                     : ""}
@@ -268,7 +270,7 @@ function showToast(msg) {
     const t = document.getElementById("toast");
     t.textContent = msg;
     t.classList.add("show");
-    setTimeout(() => t.classList.remove("show"), 2500);
+    setTimeout(() => t.classList.remove("show"), 4000);
 }
 
 function esc(str) {

@@ -111,7 +111,9 @@
             border-radius: 50%; animation: spin 0.75s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
         .state-label { font-size: 14px; color: rgba(255,255,255,0.5); }
-        .error-icon  { font-size: 44px; }
+        .error-icon  { color: rgba(255,255,255,0.35); }
+        #error-action { margin-top: 4px; font-size: 13px; color: rgba(255,255,255,0.3);
+            text-align: center; max-width: 280px; line-height: 1.5; }
     </style>
 </head>
 <body>
@@ -121,8 +123,14 @@
     <p class="state-label">Loading capture...</p>
 </div>
 <div id="error-state">
-    <div class="error-icon">⚠️</div>
-    <p class="state-label" id="error-msg">Could not load this capture.</p>
+    <div class="error-icon">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+    </div>
+    <p class="state-label" id="error-msg">This tour could not be loaded.</p>
+    <p id="error-action">Check your connection and try refreshing the page.</p>
 </div>
 
 <div id="viewer">
@@ -148,7 +156,7 @@
     <div id="ann-type"></div>
 </div>
 <div id="dots"></div>
-<div id="hint">tap hotspots or swipe to move</div>
+<div id="hint">Drag or tap hotspots to navigate</div>
 <div id="debug"></div>
 
 <div id="controls">
@@ -269,7 +277,7 @@ async function loadSession() {
     } catch (e) {
         document.getElementById("loading").style.display = "none";
         document.getElementById("error-state").style.display = "flex";
-        document.getElementById("error-msg").textContent = `Could not load capture: ${e.message}`;
+        document.getElementById("error-msg").textContent = "This tour could not be loaded.";
     }
 }
 
@@ -393,7 +401,7 @@ function getRoomForFrame(index) {
 function updateRoomLabel(index) {
     const room = getRoomForFrame(index);
     const el   = document.getElementById("room-label");
-    if (room) { el.textContent = `${room.icon || "🏠"} ${room.name}`; el.style.display = "block"; }
+    if (room) { el.textContent = room.name; el.style.display = "block"; }
     else      { el.style.display = "none"; }
 }
 
@@ -404,7 +412,7 @@ function updateAnnotationPanel(index) {
     const panel = document.getElementById("ann-panel");
     if (anns.length === 0) { panel.style.display = "none"; return; }
     const ann = anns[0];
-    const typeLabels = { info:"ℹ️ Info", feature:"⭐ Feature", upgrade:"✨ Upgrade", caution:"⚠️ Caution" };
+    const typeLabels = { info:"Info", feature:"Feature", upgrade:"Upgrade", caution:"Caution" };
     document.getElementById("ann-title").textContent = ann.title || "";
     document.getElementById("ann-body").textContent  = ann.body  || "";
     document.getElementById("ann-type").textContent  = typeLabels[ann.type] || "";

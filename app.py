@@ -123,13 +123,30 @@ def ingest_event():
     if not os.path.isdir(os.path.join(UPLOAD_FOLDER, scan_id)):
         return jsonify({"error": "scan not found"}), 404
 
+    # Validate and sanitize frame_index
+    raw_fi = body.get("frame_index")
+    frame_index = None
+    if raw_fi is not None:
+        try:
+            frame_index = int(raw_fi)
+            if frame_index < 0:
+                frame_index = None
+            elif event_type == "frame_view":
+                manifest = load_manifest(scan_id)
+                if manifest:
+                    fc = manifest.get("frame_count", 0)
+                    if fc > 0 and frame_index >= fc:
+                        return jsonify({"error": "frame_index out of range"}), 400
+        except (TypeError, ValueError):
+            frame_index = None
+
     event = {
         "event_id":    str(uuid.uuid4())[:8],
         "scan_id":     scan_id,
         "session_id":  session_id or str(uuid.uuid4())[:8],
         "event_type":  event_type,
         "timestamp":   datetime.now(timezone.utc).isoformat(),
-        "frame_index": body.get("frame_index"),
+        "frame_index": frame_index,
         "room_name":   body.get("room_name"),
         "source_page": body.get("source_page", ""),
         "meta":        body.get("meta", {})

@@ -118,8 +118,8 @@
 </header>
 
 <div id="tabs">
-    <div class="tab active" onclick="switchTab('rooms')">🏠 Rooms</div>
-    <div class="tab"        onclick="switchTab('annotations')">📌 Annotations</div>
+    <div class="tab active" onclick="switchTab('rooms')">Rooms</div>
+    <div class="tab"        onclick="switchTab('annotations')">Annotations</div>
 </div>
 
 <!-- ── Rooms panel ── -->
@@ -162,7 +162,6 @@ let rooms      = [];
 let annotations = [];
 
 const ANNOTATION_TYPES = ["info","feature","upgrade","caution","access"];
-const ROOM_ICONS = ["🏠","🛋","🍳","🛏","🚿","🪴","🏢","📦","🚗","🌿"];
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
@@ -233,8 +232,8 @@ function makeRoomCard(room, i) {
     div.className = "room-card";
     div.innerHTML = `
         <div class="room-card-row">
-            <input class="input-icon" type="text" value="${esc(room.icon || '🏠')}"
-                placeholder="🏠" title="Icon emoji" oninput="rooms[${i}].icon=this.value">
+            <input class="input-icon" type="text" value="${esc(room.icon && !/\p{Emoji}/u.test(room.icon) ? room.icon : '')}"
+                placeholder="—" title="Short label" oninput="rooms[${i}].icon=this.value">
             <input class="input-full" type="text" value="${esc(room.name)}"
                 placeholder="Room name" oninput="rooms[${i}].name=this.value">
             <button class="btn btn-danger" onclick="removeRoom(${i})">✕</button>
@@ -255,7 +254,7 @@ function makeRoomCard(room, i) {
 }
 
 function addRoom() {
-    rooms.push({ id: newId(), name: "", start_frame: 0, end_frame: 0, icon: "🏠" });
+    rooms.push({ id: newId(), name: "", start_frame: 0, end_frame: 0, icon: "" });
     renderRooms();
 }
 
