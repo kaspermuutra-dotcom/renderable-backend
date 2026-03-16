@@ -130,6 +130,16 @@
         .room-chip.active { background: rgba(62,207,142,0.18);
             border-color: rgba(62,207,142,0.5); color: #3ecf8e; }
 
+        /* ── Large-scan progress bar ── */
+        #progress-bar { position: absolute; bottom: 108px; left: 50%;
+            transform: translateX(-50%); z-index: 20;
+            width: calc(100% - 48px); max-width: 280px;
+            height: 2px; border-radius: 2px;
+            background: rgba(255,255,255,0.1); display: none; }
+        #progress-bar-fill { height: 100%; width: 0%; border-radius: 2px;
+            background: rgba(255,255,255,0.4);
+            transition: width 0.35s cubic-bezier(0.4,0,0.2,1); }
+
         /* ── Compass HUD ── */
         #compass { position: absolute; top: 70px; right: 16px; z-index: 20;
             font-size: 11px; font-family: monospace; font-weight: 600;
@@ -187,6 +197,7 @@
     <div id="ann-type"></div>
 </div>
 <div id="room-strip"></div>
+<div id="progress-bar"><div id="progress-bar-fill"></div></div>
 <div id="dots"></div>
 <div id="hint">Drag or tap hotspots to navigate</div>
 <div id="debug"></div>
@@ -458,6 +469,29 @@ function iconForAngle(angle) {
     return HOTSPOT_ICONS.left;
 }
 
+// Returns the transition direction string for goTo() matching the visual angle.
+function dirForAngle(angle) {
+    const a = ((angle % 360) + 360) % 360;
+    if (a < 45 || a >= 315) return "forward";
+    if (a < 135)            return "right";
+    if (a < 225)            return "back";
+    return "left";
+}
+
+// Returns hotspot ring size scaled to visual prominence (larger = more forward).
+function ringSizeForAngle(angle) {
+    const a = ((angle % 360) + 360) % 360;
+    if (a < 45 || a >= 315)  return 60;  // forward-ish
+    if (a >= 135 && a < 225) return 44;  // back-ish
+    return 52;                            // side
+}
+
+// Returns ring opacity (back-ish hotspots are de-emphasised).
+function ringOpacityForAngle(angle) {
+    const a = ((angle % 360) + 360) % 360;
+    return (a >= 135 && a < 225) ? "0.7" : "1";
+}
+
 // ── Hotspots ──────────────────────────────────────────────────────────────────
 
 function renderHotspots() {
@@ -471,9 +505,13 @@ function renderHotspots() {
         const targetHeading = frameObjects[targetIndex]?.heading;
         const useHeading    = currentHeading != null && targetHeading != null;
 
+        // Hoist relAngle so it is available to all heading-aware derivations below.
+        const relAngle = useHeading
+            ? ((targetHeading - currentHeading) + 360) % 360
+            : null;
+
         let pos, icon;
         if (useHeading) {
-            const relAngle = ((targetHeading - currentHeading) + 360) % 360;
             pos  = angleToScreenPosition(relAngle);
             icon = iconForAngle(relAngle);
         } else {
@@ -482,10 +520,23 @@ function renderHotspots() {
             if (!pos) return;
         }
 
+        // Transition direction: use visual angle when heading mode is active so
+        // the slide animation matches the spatial cue the user sees on screen.
+        // Falls back to the topological dir key for non-heading scans.
+        const transDir = useHeading ? dirForAngle(relAngle) : dir;
+
+        // Ring size and opacity: derive from visual angle in heading mode so
+        // forward-looking hotspots are large/prominent and back-looking ones
+        // are small/dim regardless of what the graph key says.
+        const ringSize    = useHeading
+            ? ringSizeForAngle(relAngle)
+            : (dir === "forward" ? 60 : (dir === "back" ? 44 : 52));
+        const ringOpacity = useHeading
+            ? ringOpacityForAngle(relAngle)
+            : (dir === "back" ? "0.7" : "1");
+
         const targetRoom   = getRoomForFrame(targetIndex);
         const enteringRoom = targetRoom && (!currentRoom || targetRoom.name !== currentRoom.name);
-        const ringSize     = dir === "forward" ? 60 : (dir === "back" ? 44 : 52);
-        const ringOpacity  = dir === "back" ? "0.7" : "1";
 
         const hotspot = document.createElement("div");
         hotspot.className = "hotspot";
@@ -505,8 +556,9 @@ function renderHotspots() {
             hotspot.appendChild(lbl);
         }
 
-        hotspot.addEventListener("click", () => moveInDirection(dir));
-        hotspot.addEventListener("touchend", e => { e.stopPropagation(); moveInDirection(dir); });
+        // Navigate to the graph-resolved target; animate in the visually correct direction.
+        hotspot.addEventListener("click",    ()  => { stopPlay(); goTo(targetIndex, transDir); });
+        hotspot.addEventListener("touchend", e   => { e.stopPropagation(); stopPlay(); goTo(targetIndex, transDir); });
         container.appendChild(hotspot);
     });
 }
@@ -662,10 +714,13 @@ document.addEventListener("mouseup", () => {
 // ── Keyboard ──────────────────────────────────────────────────────────────────
 
 document.addEventListener("keydown", e => {
-    if      (e.key === "ArrowRight") moveInDirection("forward");
-    else if (e.key === "ArrowLeft")  moveInDirection("back");
-    else if (e.key === "ArrowUp")    moveInDirection("forward");
+    // Spatial mapping: Up/Down = forward/back along the path;
+    // Left/Right = lateral graph neighbours when they exist,
+    // silently no-ops in linear fallback where only forward/back are defined.
+    if      (e.key === "ArrowUp")    moveInDirection("forward");
     else if (e.key === "ArrowDown")  moveInDirection("back");
+    else if (e.key === "ArrowLeft")  moveInDirection("left");
+    else if (e.key === "ArrowRight") moveInDirection("right");
     else if (e.key === " ")          { e.preventDefault(); togglePlay(); }
     else if (e.key === "d")          toggleDebug();
 });
@@ -707,9 +762,11 @@ function updateUI() {
 function buildDots() {
     const container = document.getElementById("dots");
     container.innerHTML = "";
-    // Hide dot navigator for large scans — dots become too small and crowded
-    // to be useful above DOT_THRESHOLD. Room strip + progress counter suffice.
-    if (frameURLs.length > DOT_THRESHOLD) return;
+    if (frameURLs.length > DOT_THRESHOLD) {
+        // Dots would be too crowded — show the thin progress bar instead.
+        document.getElementById("progress-bar").style.display = "block";
+        return;
+    }
     frameURLs.forEach((_, i) => {
         const d = document.createElement("div");
         d.className = "dot";
@@ -722,6 +779,15 @@ function updateDots() {
     document.querySelectorAll(".dot").forEach((d, i) => {
         d.classList.toggle("active", i === current);
     });
+    // Keep progress bar in sync regardless of which mode is active.
+    // The bar is display:none for small scans so this is a silent no-op then.
+    const fill = document.getElementById("progress-bar-fill");
+    if (fill) {
+        const pct = frameURLs.length > 1
+            ? (current / (frameURLs.length - 1)) * 100
+            : 0;
+        fill.style.width = pct + "%";
+    }
 }
 
 function buildRoomStrip() {
