@@ -262,11 +262,16 @@ let annotations      = [];
 let captureMode      = null;   // "standard" | "wide" — optional, may be absent
 let lensFactor       = null;   // 1.0 | 0.5 — optional, may be absent
 let targetFrameCount = null;   // integer — optional, may be absent
+let isCircular       = false;  // true when first/last frame headings are within 30°
+let playStepCount    = 0;      // steps taken in current autoplay session (loop guard)
+let scanAnalysis     = null;   // result of computeScanAnalysis(), set after loadSession()
+let frameQuality     = [];    // per-frame quality score 0–1, aligned with frameObjects index
 
 const imgCurrent = document.getElementById("frame-current");
 const imgNext    = document.getElementById("frame-next");
 
-const DOT_THRESHOLD = 12;   // hide dot navigator above this frame count
+const DOT_THRESHOLD          = 12;  // hide dot navigator above this frame count
+const MIN_HOTSPOT_SEPARATION = 30;  // degrees — minimum angular gap before collision nudge
 
 const HOTSPOT_POSITIONS = {
     forward: { left: "50%", top: "38%" },
@@ -309,6 +314,25 @@ async function loadSession() {
         });
         hasGraph = !hasDiscarded &&
             frameObjects.some(f => f.neighbors && Object.keys(f.neighbors).length > 0);
+
+        // Circular scan detection: requires a graph AND first/last frame headings
+        // within 30°. heading != null guards ensure heading: 0 (north) is not
+        // treated as absent. Conservative threshold avoids false positives on
+        // open-ended hallway or room scans.
+        isCircular = false;
+        if (hasGraph && frameObjects.length >= 2) {
+            const firstH = frameObjects[0]?.heading;
+            const lastH  = frameObjects[frameObjects.length - 1]?.heading;
+            if (firstH != null && lastH != null && angularDifference(firstH, lastH) < 30) {
+                isCircular = true;
+            }
+        }
+
+        // Scan analysis — must run after frameObjects is finalised and isCircular is set
+        // so that computeScanAnalysis() has access to the complete heading dataset.
+        scanAnalysis  = computeScanAnalysis();
+        frameQuality  = computeFrameQuality();
+
         rooms            = manifest.rooms            || [];
         annotations      = manifest.annotations      || [];
         captureMode      = manifest.capture_mode      ?? null;
@@ -452,10 +476,40 @@ function moveInDirection(dir) {
 
 // ── Heading helpers ───────────────────────────────────────────────────────────
 
-function angleToScreenPosition(angle) {
+// Returns the shortest arc between two absolute headings (result always 0–180°).
+// Both arguments must be numbers — guard with != null before calling.
+function angularDifference(a, b) {
+    const d = Math.abs(((b - a) % 360 + 360) % 360);
+    return d > 180 ? 360 - d : d;
+}
+
+// Returns neighbors of `index` sorted by relAngle ascending (0° = directly ahead,
+// increasing clockwise). Entries whose heading data is absent get relAngle = null
+// and sort to the end, preserving the existing fallback behaviour.
+function sortedNeighborsByAngle(index) {
+    const nb             = getNeighbors(index);
+    const currentHeading = frameObjects[index]?.heading;
+    return Object.entries(nb)
+        .map(([dir, targetIndex]) => {
+            const targetHeading = frameObjects[targetIndex]?.heading;
+            const relAngle = (currentHeading != null && targetHeading != null)
+                ? ((targetHeading - currentHeading) + 360) % 360
+                : null;
+            return { dir, targetIndex, relAngle };
+        })
+        .sort((a, b) => {
+            if (a.relAngle == null && b.relAngle == null) return 0;
+            if (a.relAngle == null) return  1;
+            if (b.relAngle == null) return -1;
+            return a.relAngle - b.relAngle;
+        });
+}
+
+// radius defaults to 30 (normal spread). Pass 38 when a collision nudge is needed.
+function angleToScreenPosition(angle, radius = 30) {
     const rad = angle * Math.PI / 180;
-    let x = 50 + Math.sin(rad) * 30;
-    let y = 50 - Math.cos(rad) * 30;
+    let x = 50 + Math.sin(rad) * radius;
+    let y = 50 - Math.cos(rad) * radius;
     x = Math.max(12, Math.min(88, x));
     y = Math.max(15, Math.min(82, y));
     return { left: x + "%", top: y + "%" };
@@ -492,27 +546,132 @@ function ringOpacityForAngle(angle) {
     return (a >= 135 && a < 225) ? "0.7" : "1";
 }
 
+// Analyses heading distribution across all frames to characterise the scan.
+// Requires >= 3 frames with heading data; returns null otherwise.
+// All gap calculations use the circular-correct formula: the set of consecutive
+// gaps between sorted headings PLUS the wrap-around term (sorted[0] + 360 - sorted[n-1]).
+function computeScanAnalysis() {
+    const headedFrames = frameObjects.filter(f => f.heading != null);
+    const n = headedFrames.length;
+    if (n < 3) return null;
+
+    const sorted = headedFrames.map(f => f.heading).sort((a, b) => a - b);
+
+    // Circular-correct largest gap (includes wrap-around across 0°/360°)
+    let largestGap = sorted[0] + 360 - sorted[n - 1];
+    for (let i = 1; i < n; i++) {
+        largestGap = Math.max(largestGap, sorted[i] - sorted[i - 1]);
+    }
+
+    const headingCoverage  = 360 - largestGap;
+    const coverageFraction = headingCoverage / 360;
+
+    // Average yaw delta between consecutive frameObjects pairs (both must have heading).
+    // Uses angularDifference so the result is always the shortest arc, 0–180°.
+    let deltaSum = 0, deltaCount = 0;
+    for (let i = 1; i < frameObjects.length; i++) {
+        const h0 = frameObjects[i - 1]?.heading;
+        const h1 = frameObjects[i]?.heading;
+        if (h0 != null && h1 != null) {
+            deltaSum += angularDifference(h0, h1);
+            deltaCount++;
+        }
+    }
+    const avgDeltaYaw = deltaCount > 0 ? deltaSum / deltaCount : 0;
+
+    // Count near-duplicate headings (sorted adjacent pair within 10°).
+    let duplicateCount = 0;
+    for (let i = 1; i < n; i++) {
+        if (sorted[i] - sorted[i - 1] < 10) duplicateCount++;
+    }
+
+    // Classify scan geometry.
+    let scanType = "unknown";
+    if      (largestGap < 60)          scanType = "full_room";
+    else if (coverageFraction < 0.30)  scanType = "corridor";
+    else if (headingCoverage >= 200)   scanType = "partial_room";
+
+    return { headingFrameCount: n, largestGap, headingCoverage,
+             coverageFraction, avgDeltaYaw, duplicateCount, scanType };
+}
+
+// Computes a quality score 0–1 for every frame in frameObjects.
+// Scores are derived from optional per-frame sensor metadata; fields that are
+// absent are silently skipped, so older manifests without quality data produce
+// a uniform array of 1.0 (all frames treated as full quality).
+//
+// Penalty model (cumulative, clamped to [0, 1]):
+//   rotation_rate > 1.5 rad/s  → −0.40  (motion blur from camera shake)
+//   acceleration  > 0.6 g      → −0.30  (capture instability)
+//   delta_yaw     < 5°         → −0.35  (duplicate / near-stationary viewpoint)
+//   blur                       → −0 to −0.30 soft (proportional to blur / 150)
+//
+// delta_yaw is read from frame.delta_yaw when present; otherwise computed live
+// from consecutive heading pairs so the penalty applies even on older manifests
+// that supply heading but not delta_yaw.
+function computeFrameQuality() {
+    return frameObjects.map((frame, i) => {
+        let penalty = 0;
+
+        // Camera shake — high rotation rate smears the image
+        if (frame.rotation_rate != null && frame.rotation_rate > 1.5) {
+            penalty += 0.40;
+        }
+
+        // Capture instability — high acceleration during shutter
+        if (frame.acceleration != null && frame.acceleration > 0.6) {
+            penalty += 0.30;
+        }
+
+        // Duplicate / near-stationary viewpoint
+        let deltaYaw = frame.delta_yaw ?? null;
+        if (deltaYaw == null && i > 0) {
+            const h0 = frameObjects[i - 1]?.heading;
+            const h1 = frame.heading;
+            if (h0 != null && h1 != null) deltaYaw = angularDifference(h0, h1);
+        }
+        if (deltaYaw != null && deltaYaw < 5) {
+            penalty += 0.35;
+        }
+
+        // Soft blur penalty: blur=0 → no penalty, blur=150 → full −0.30
+        if (frame.blur != null) {
+            penalty += Math.min(frame.blur / 150, 1) * 0.30;
+        }
+
+        return Math.max(0, Math.min(1, 1 - penalty));
+    });
+}
+
 // ── Hotspots ──────────────────────────────────────────────────────────────────
 
 function renderHotspots() {
-    const container = document.getElementById("hotspots");
+    const container  = document.getElementById("hotspots");
     container.innerHTML = "";
-    const nb = getNeighbors(current);
-    const currentRoom    = getRoomForFrame(current);
-    const currentHeading = frameObjects[current]?.heading;
+    const currentRoom = getRoomForFrame(current);
 
-    Object.entries(nb).forEach(([dir, targetIndex]) => {
-        const targetHeading = frameObjects[targetIndex]?.heading;
-        const useHeading    = currentHeading != null && targetHeading != null;
+    // Sorted by relAngle ascending so the most-forward hotspot is last in the DOM
+    // (highest stacking order, wins click priority) and adjacent-pair collision
+    // detection is a single linear scan.
+    const sorted = sortedNeighborsByAngle(current);
 
-        // Hoist relAngle so it is available to all heading-aware derivations below.
-        const relAngle = useHeading
-            ? ((targetHeading - currentHeading) + 360) % 360
-            : null;
+    sorted.forEach(({ dir, targetIndex, relAngle }, i) => {
+        const useHeading = relAngle != null;
+
+        // Collision nudge: when this entry's angle is within MIN_HOTSPOT_SEPARATION
+        // of the previous heading-aware entry, push it further out radially so the
+        // two rings don't fully overlap. Only applies when both have heading data.
+        let radius = 30;
+        if (useHeading && i > 0) {
+            const prev = sorted[i - 1];
+            if (prev.relAngle != null && (relAngle - prev.relAngle) < MIN_HOTSPOT_SEPARATION) {
+                radius = 38;
+            }
+        }
 
         let pos, icon;
         if (useHeading) {
-            pos  = angleToScreenPosition(relAngle);
+            pos  = angleToScreenPosition(relAngle, radius);
             icon = iconForAngle(relAngle);
         } else {
             pos  = HOTSPOT_POSITIONS[dir];
@@ -520,20 +679,31 @@ function renderHotspots() {
             if (!pos) return;
         }
 
+        // Quality weighting: suppress or dim hotspots pointing to low-quality frames.
+        // frameQuality is empty for manifests without sensor data, so we default to
+        // full quality (1.0) to keep behaviour identical for older scans.
+        const quality = frameQuality.length > 0 ? (frameQuality[targetIndex] ?? 1) : 1;
+        if (quality < 0.20) return;  // suppress entirely — frame is very low quality
+
         // Transition direction: use visual angle when heading mode is active so
         // the slide animation matches the spatial cue the user sees on screen.
-        // Falls back to the topological dir key for non-heading scans.
         const transDir = useHeading ? dirForAngle(relAngle) : dir;
 
         // Ring size and opacity: derive from visual angle in heading mode so
         // forward-looking hotspots are large/prominent and back-looking ones
         // are small/dim regardless of what the graph key says.
-        const ringSize    = useHeading
+        // Quality < 0.35 additionally reduces size and opacity as a visual signal.
+        const qualityDim  = quality < 0.35;
+        const ringSize    = (useHeading
             ? ringSizeForAngle(relAngle)
-            : (dir === "forward" ? 60 : (dir === "back" ? 44 : 52));
-        const ringOpacity = useHeading
+            : (dir === "forward" ? 60 : (dir === "back" ? 44 : 52)))
+            * (qualityDim ? 0.78 : 1);
+        const baseOpacity = useHeading
             ? ringOpacityForAngle(relAngle)
             : (dir === "back" ? "0.7" : "1");
+        const ringOpacity = qualityDim
+            ? String(Math.round(parseFloat(baseOpacity) * 0.50 * 100) / 100)
+            : baseOpacity;
 
         const targetRoom   = getRoomForFrame(targetIndex);
         const enteringRoom = targetRoom && (!currentRoom || targetRoom.name !== currentRoom.name);
@@ -609,13 +779,28 @@ function togglePlay() { isPlaying ? stopPlay() : startPlay(); }
 
 function startPlay() {
     if (current === frameURLs.length - 1) setFrame(0);
-    isPlaying = true;
+    isPlaying     = true;
+    playStepCount = 0;
     document.getElementById("play-btn").innerHTML = "&#9646;&#9646;";
+    // Corridor scans have tight, evenly-spaced frames so a faster interval feels
+    // natural. All other scan types (full_room, partial_room, unknown) use the
+    // default 2200 ms to give the viewer time to read each wider-angle frame.
+    const playInterval = scanAnalysis?.scanType === "corridor" ? 1800 : 2200;
     playTimer = setInterval(() => {
+        playStepCount++;
+        // Hard cap at frameURLs.length steps to prevent infinite loops on
+        // circular scans. One full loop is always allowed.
+        if (playStepCount > frameURLs.length) { stopPlay(); return; }
         const nb = getNeighbors(current);
-        if (nb.forward !== undefined) goTo(nb.forward, "forward");
-        else stopPlay();
-    }, 2200);
+        if (nb.forward !== undefined) {
+            goTo(nb.forward, "forward");
+        } else if (isCircular) {
+            // Circular scan: wrap back to frame 0 instead of stopping.
+            goTo(0, "forward");
+        } else {
+            stopPlay();
+        }
+    }, playInterval);
 }
 
 function stopPlay() {
@@ -737,12 +922,41 @@ function updateDebug() {
     if (el.style.display !== "block") return;
     const nb = getNeighbors(current);
     const heading = frameObjects[current]?.heading;
+    const sa = scanAnalysis;
+
+    // Frame quality summary — computed inline so it always reflects current state.
+    let qAvg = "—", qWorst = "—", qDups = "—";
+    if (frameQuality.length > 0) {
+        const sum  = frameQuality.reduce((a, b) => a + b, 0);
+        qAvg  = Math.round((sum / frameQuality.length) * 100) + "%";
+        let worstScore = 1, worstIdx = 0;
+        frameQuality.forEach((q, i) => { if (q < worstScore) { worstScore = q; worstIdx = i; } });
+        qWorst = `#${worstIdx} (${Math.round(worstScore * 100)}%)`;
+        // Duplicate frames: those where the delta_yaw penalty would have fired,
+        // i.e. quality reduced by >= 0.35 from a near-stationary viewpoint.
+        // Approximated as frames with quality <= 0.65 that have a low delta_yaw.
+        let dupCount = 0;
+        frameObjects.forEach((frame, i) => {
+            let deltaYaw = frame.delta_yaw ?? null;
+            if (deltaYaw == null && i > 0) {
+                const h0 = frameObjects[i - 1]?.heading;
+                const h1 = frame.heading;
+                if (h0 != null && h1 != null) deltaYaw = angularDifference(h0, h1);
+            }
+            if (deltaYaw != null && deltaYaw < 5) dupCount++;
+        });
+        qDups = String(dupCount);
+    }
+
     el.textContent =
         `frame: ${current} / ${frameURLs.length - 1}\n` +
-        `graph: ${hasGraph ? "yes" : "fallback"}\n` +
+        `graph: ${hasGraph ? "yes" : "fallback"}  circular: ${isCircular ? "yes" : "no"}\n` +
         `heading: ${heading != null ? Math.round(heading) + "°" : "—"}\n` +
         `mode: ${captureMode || "—"}  lens: ${lensFactor != null ? lensFactor + "x" : "—"}  target: ${targetFrameCount ?? "—"}\n` +
         `neighbors: ${JSON.stringify(nb)}\n` +
+        `scanType: ${sa ? sa.scanType : "—"}  coverage: ${sa ? Math.round(sa.coverageFraction * 100) + "%" : "—"}\n` +
+        `largestGap: ${sa ? Math.round(sa.largestGap) + "°" : "—"}  avgΔyaw: ${sa ? Math.round(sa.avgDeltaYaw * 10) / 10 + "°" : "—"}  dups: ${sa ? sa.duplicateCount : "—"}\n` +
+        `quality: avg ${qAvg}  worst ${qWorst}  dupFrames ${qDups}\n` +
         `session: ${SESSION_ID}`;
 }
 
@@ -763,8 +977,12 @@ function buildDots() {
     const container = document.getElementById("dots");
     container.innerHTML = "";
     if (frameURLs.length > DOT_THRESHOLD) {
-        // Dots would be too crowded — show the thin progress bar instead.
-        document.getElementById("progress-bar").style.display = "block";
+        // Show the thin progress bar for large linear scans.
+        // Suppress it for circular scans — position on a loop has no meaningful
+        // start/end, so the bar would reset confusingly on each wrap.
+        if (!isCircular) {
+            document.getElementById("progress-bar").style.display = "block";
+        }
         return;
     }
     frameURLs.forEach((_, i) => {
