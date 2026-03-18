@@ -184,7 +184,7 @@
         <span id="capture-badge" style="display:none;font-size:10px;font-weight:700;
            color:rgba(255,255,255,0.45);background:rgba(255,255,255,0.08);
            padding:3px 9px;border-radius:20px;border:1px solid rgba(255,255,255,0.12);
-           letter-spacing:0.6px;text-transform:uppercase">Wide</span>
+           letter-spacing:0.6px;text-transform:uppercase"></span>
         <span id="progress">— / —</span>
     </div>
 </div>
@@ -205,6 +205,23 @@
 <div id="controls">
     <button id="play-btn" onclick="togglePlay()">&#9654;</button>
 </div>
+
+<div id="minimap" style="
+    display: none;
+    position: absolute;
+    bottom: 88px;
+    right: 16px;
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    background: rgba(0,0,0,0.45);
+    border: 1px solid rgba(255,255,255,0.10);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    pointer-events: none;
+    z-index: 20;
+    overflow: hidden;
+"></div>
 
 <script>
 const SCAN_ID = "{{ scan_id }}";
@@ -333,7 +350,40 @@ async function loadSession() {
         scanAnalysis  = computeScanAnalysis();
         frameQuality  = computeFrameQuality();
 
-        rooms            = manifest.rooms            || [];
+        // Remap room frame boundaries from original manifest indices to filtered
+        // frameObjects indices. When frames are discarded the manifest's start_frame /
+        // end_frame values refer to the original unfiltered array and must be
+        // translated before use. When no frames are discarded the indices are
+        // already aligned and the manifest values are used as-is.
+        let remappedRooms = manifest.rooms || [];
+        if (hasDiscarded && remappedRooms.length > 0) {
+            // Build forward map: original index → filtered index.
+            const origToFiltered = {};
+            let fi = 0;
+            rawFrames.forEach((frame, oi) => {
+                if (!frame.discarded) { origToFiltered[oi] = fi++; }
+            });
+            remappedRooms = remappedRooms.map(room => {
+                const s = room.start_frame ?? 0;
+                const e = room.end_frame   ?? 0;
+                // First non-discarded frame at or after s.
+                let mappedStart = -1;
+                for (let oi = s; oi <= e && oi < rawFrames.length; oi++) {
+                    if (origToFiltered[oi] !== undefined) { mappedStart = origToFiltered[oi]; break; }
+                }
+                // Last non-discarded frame at or before e.
+                let mappedEnd = -1;
+                for (let oi = e; oi >= s; oi--) {
+                    if (origToFiltered[oi] !== undefined) { mappedEnd = origToFiltered[oi]; break; }
+                }
+                // If no valid frames survive in this range, mark room as empty.
+                if (mappedStart === -1 || mappedEnd === -1 || mappedStart > mappedEnd) {
+                    return { ...room, start_frame: -1, end_frame: -1 };
+                }
+                return { ...room, start_frame: mappedStart, end_frame: mappedEnd };
+            });
+        }
+        rooms = remappedRooms;
         annotations      = manifest.annotations      || [];
         captureMode      = manifest.capture_mode      ?? null;
         lensFactor       = manifest.lens_factor       ?? null;
@@ -341,10 +391,20 @@ async function loadSession() {
 
         if (frameURLs.length === 0) throw new Error("No frames found");
 
-        // Show "Wide" badge when capture mode is known
-        if (captureMode === "wide") {
+        // Show capture mode badge for known modes.
+        // Wide: green accent tint to signal non-standard optics.
+        // Standard: neutral white — identical badge shape, no color override needed.
+        if (captureMode === "wide" || captureMode === "standard") {
             const badge = document.getElementById("capture-badge");
-            if (badge) badge.style.display = "inline-block";
+            if (badge) {
+                badge.textContent = captureMode === "wide" ? "Wide" : "Standard";
+                if (captureMode === "wide") {
+                    badge.style.color      = "rgba(62,207,142,0.8)";
+                    badge.style.background = "rgba(62,207,142,0.08)";
+                    badge.style.border     = "1px solid rgba(62,207,142,0.2)";
+                }
+                badge.style.display = "inline-block";
+            }
         }
 
         // Phase 1 — load frame 0, show viewer immediately
@@ -579,10 +639,13 @@ function computeScanAnalysis() {
     }
     const avgDeltaYaw = deltaCount > 0 ? deltaSum / deltaCount : 0;
 
-    // Count near-duplicate headings (sorted adjacent pair within 10°).
+    // Count consecutive frameObjects pairs where heading diff < 5° — matches the
+    // threshold used in computeFrameQuality() so both systems agree on duplicates.
     let duplicateCount = 0;
-    for (let i = 1; i < n; i++) {
-        if (sorted[i] - sorted[i - 1] < 10) duplicateCount++;
+    for (let i = 1; i < frameObjects.length; i++) {
+        const h0 = frameObjects[i - 1]?.heading;
+        const h1 = frameObjects[i]?.heading;
+        if (h0 != null && h1 != null && angularDifference(h0, h1) < 5) duplicateCount++;
     }
 
     // Classify scan geometry.
@@ -637,6 +700,12 @@ function computeFrameQuality() {
         // Soft blur penalty: blur=0 → no penalty, blur=150 → full −0.30
         if (frame.blur != null) {
             penalty += Math.min(frame.blur / 150, 1) * 0.30;
+        }
+
+        // Soft exposure penalty: same scale assumption as blur (divisor 150).
+        // Weight 0.20 — lower than blur's 0.30 as exposure is less critical than motion.
+        if (frame.exposure_score != null) {
+            penalty += Math.min(frame.exposure_score / 150, 1) * 0.20;
         }
 
         return Math.max(0, Math.min(1, 1 - penalty));
@@ -733,6 +802,86 @@ function renderHotspots() {
     });
 }
 
+// ── Minimap ───────────────────────────────────────────────────────────────────
+
+// Read-only spatial overview rendered as a circular ring of frame dots.
+// Each dot's angular position corresponds to the frame's compass heading (or
+// angle_from_start when heading is absent). The current frame is always the
+// topmost dot (appended last) and highlighted in accent green.
+// This function is a pure consumer — it writes only to #minimap's innerHTML
+// and touches no other state.
+function renderMinimap() {
+    const el = document.getElementById("minimap");
+    if (!el) return;
+
+    const hasData = frameObjects.some(f =>
+        f.polar_x != null || f.heading != null
+    );
+    if (!hasData) { el.style.display = "none"; return; }
+
+    // Sessions captured before Stage 5 will have neither heading
+    // nor angle_from_start. hasData will be false and the minimap
+    // will stay hidden. No error will occur. Full backward compatibility.
+
+    el.style.display = "block";
+    el.innerHTML = "";
+
+    const cx = 60, cy = 60, r = 44;
+    let currentDot = null;
+
+    try {
+        frameObjects.forEach((f, i) => {
+            // Prefer compass heading; fall back to angle_from_start; skip if neither.
+            let angle = null;
+            if      (f.heading          != null) angle = f.heading;
+            else if (f.angle_from_start != null) angle = f.angle_from_start;
+            if (angle == null) return;
+
+            // Polar-to-Cartesian: 0° → top of circle (north), increases clockwise.
+            const rad = (angle - 90) * Math.PI / 180;
+            const x   = cx + r * Math.cos(rad);
+            const y   = cy + r * Math.sin(rad);
+
+            // Current frame is deferred so it is appended last (guaranteed on top).
+            if (i === current) { currentDot = { x, y }; return; }
+
+            const q = frameQuality.length > 0 ? (frameQuality[i] ?? 1) : 1;
+            if (q < 0.20) return;  // suppress very-low-quality frames entirely
+
+            const size  = q < 0.35 ? 3 : 4;
+            const color = q < 0.35 ? "rgba(255,255,255,0.25)" : "rgba(255,255,255,0.55)";
+
+            const dot = document.createElement("div");
+            dot.style.cssText =
+                `position:absolute;width:${size}px;height:${size}px;` +
+                `border-radius:50%;background:${color};` +
+                `left:${x}px;top:${y}px;z-index:1;` +
+                `transform:translate(-50%,-50%)`;
+            el.appendChild(dot);
+        });
+    } catch (e) { /* defensive — never propagate errors to the caller */ }
+
+    // Center crosshair — appended before the current-frame dot so the dot
+    // always renders on top of it.
+    const cross = document.createElement("div");
+    cross.style.cssText =
+        `position:absolute;width:6px;height:6px;border-radius:50%;` +
+        `background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.20);` +
+        `left:${cx}px;top:${cy}px;transform:translate(-50%,-50%);z-index:2`;
+    el.appendChild(cross);
+
+    // Current frame dot — appended last so it is always the topmost element.
+    if (currentDot) {
+        const dot = document.createElement("div");
+        dot.style.cssText =
+            `position:absolute;width:7px;height:7px;border-radius:50%;` +
+            `background:rgba(62,207,142,1.0);` +
+            `left:${currentDot.x}px;top:${currentDot.y}px;z-index:3;` +
+            `transform:translate(-50%,-50%)`;
+        el.appendChild(dot);
+    }
+}
+
 // ── Compass ───────────────────────────────────────────────────────────────────
 
 function updateCompass(index) {
@@ -749,7 +898,9 @@ function updateCompass(index) {
 // ── Room label ────────────────────────────────────────────────────────────────
 
 function getRoomForFrame(index) {
-    return rooms.find(r => index >= (r.start_frame ?? 0) && index <= (r.end_frame ?? 0)) || null;
+    // start_frame === -1 marks a room whose entire original frame range was discarded.
+    return rooms.find(r => r.start_frame !== -1 &&
+        index >= (r.start_frame ?? 0) && index <= (r.end_frame ?? 0)) || null;
 }
 
 function updateRoomLabel(index) {
@@ -765,11 +916,16 @@ function updateAnnotationPanel(index) {
     const anns  = annotations.filter(a => a.frame_index === index);
     const panel = document.getElementById("ann-panel");
     if (anns.length === 0) { panel.style.display = "none"; return; }
-    const ann = anns[0];
     const typeLabels = { info:"Info", feature:"Feature", upgrade:"Upgrade", caution:"Caution" };
-    document.getElementById("ann-title").textContent = ann.title || "";
-    document.getElementById("ann-body").textContent  = ann.body  || "";
-    document.getElementById("ann-type").textContent  = typeLabels[ann.type] || "";
+    panel.innerHTML = anns.map((ann, i) => {
+        const sep = i > 0
+            ? `<hr style="border:none;border-top:1px solid rgba(255,255,255,0.08);margin:10px 0">`
+            : "";
+        return sep +
+            `<div style="font-weight:600;margin-bottom:2px">${ann.title || ""}</div>` +
+            `<div style="color:rgba(255,255,255,0.6);font-size:12px">${ann.body  || ""}</div>` +
+            `<div style="margin-top:6px;font-size:11px;color:rgba(255,255,255,0.35)">${typeLabels[ann.type] || ""}</div>`;
+    }).join("");
     panel.style.display = "block";
 }
 
@@ -925,28 +1081,17 @@ function updateDebug() {
     const sa = scanAnalysis;
 
     // Frame quality summary — computed inline so it always reflects current state.
-    let qAvg = "—", qWorst = "—", qDups = "—";
+    let qAvg = "—", qWorst = "—";
     if (frameQuality.length > 0) {
         const sum  = frameQuality.reduce((a, b) => a + b, 0);
         qAvg  = Math.round((sum / frameQuality.length) * 100) + "%";
         let worstScore = 1, worstIdx = 0;
         frameQuality.forEach((q, i) => { if (q < worstScore) { worstScore = q; worstIdx = i; } });
         qWorst = `#${worstIdx} (${Math.round(worstScore * 100)}%)`;
-        // Duplicate frames: those where the delta_yaw penalty would have fired,
-        // i.e. quality reduced by >= 0.35 from a near-stationary viewpoint.
-        // Approximated as frames with quality <= 0.65 that have a low delta_yaw.
-        let dupCount = 0;
-        frameObjects.forEach((frame, i) => {
-            let deltaYaw = frame.delta_yaw ?? null;
-            if (deltaYaw == null && i > 0) {
-                const h0 = frameObjects[i - 1]?.heading;
-                const h1 = frame.heading;
-                if (h0 != null && h1 != null) deltaYaw = angularDifference(h0, h1);
-            }
-            if (deltaYaw != null && deltaYaw < 5) dupCount++;
-        });
-        qDups = String(dupCount);
     }
+    // scanAnalysis.duplicateCount now uses the same 5° threshold as computeFrameQuality(),
+    // so reading it directly avoids computing the same thing twice.
+    const qDups = sa ? String(sa.duplicateCount) : "—";
 
     el.textContent =
         `frame: ${current} / ${frameURLs.length - 1}\n` +
@@ -971,6 +1116,7 @@ function updateUI() {
     updateDebug();
     updateRoomLabel(current);
     updateAnnotationPanel(current);
+    renderMinimap();
 }
 
 function buildDots() {
