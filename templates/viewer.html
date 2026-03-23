@@ -127,8 +127,8 @@
             background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.15);
             color: rgba(255,255,255,0.6);
             transition: background 0.2s, color 0.2s, border-color 0.2s; }
-        .room-chip.active { background: rgba(62,207,142,0.18);
-            border-color: rgba(62,207,142,0.5); color: #3ecf8e; }
+        .room-chip.active { background: rgba(62,207,142,0.08);
+            border-color: rgba(62,207,142,0.18); color: rgba(62,207,142,0.45); }
 
         /* ── Large-scan progress bar ── */
         #progress-bar { position: absolute; bottom: 108px; left: 50%;
@@ -148,9 +148,66 @@
             border: 1px solid rgba(255,255,255,0.12);
             padding: 4px 10px; border-radius: 20px;
             pointer-events: none; display: none; letter-spacing: 0.3px; }
+
+        @keyframes loaderSlide {
+            0%   { transform: translateX(-120%); }
+            60%  { transform: translateX(240%); }
+            100% { transform: translateX(240%); }
+        }
     </style>
 </head>
 <body>
+
+<div id="welcome-screen" style="
+    position: fixed;
+    inset: 0;
+    background: #000000;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    transition: opacity 600ms cubic-bezier(0.4,0,0.2,1);
+    pointer-events: none;
+">
+    <div style="
+        font-size: 26px;
+        font-weight: 600;
+        letter-spacing: 0.16em;
+        font-family: -apple-system, BlinkMacSystemFont,
+                     'SF Pro Display', 'Helvetica Neue',
+                     sans-serif;
+        text-transform: uppercase;
+    ">
+        <span style="color:rgba(255,255,255,0.95)">Render</span><span style="color:#3ecf8e">able</span>
+    </div>
+    <div style="
+        font-size: 10px;
+        letter-spacing: 0.28em;
+        color: rgba(255,255,255,0.25);
+        font-family: -apple-system, BlinkMacSystemFont,
+                     'SF Pro Text', 'Helvetica Neue',
+                     sans-serif;
+        text-transform: uppercase;
+    ">Spatial Walkthrough</div>
+    <div style="
+        margin-top: 36px;
+        width: 28px;
+        height: 1px;
+        background: rgba(255,255,255,0.10);
+        border-radius: 1px;
+        overflow: hidden;
+    ">
+        <div style="
+            height: 100%;
+            width: 45%;
+            background: rgba(255,255,255,0.55);
+            border-radius: 1px;
+            animation: loaderSlide 1.4s ease-in-out infinite;
+        "></div>
+    </div>
+</div>
 
 <div id="loading">
     <div class="spinner"></div>
@@ -399,9 +456,9 @@ async function loadSession() {
             if (badge) {
                 badge.textContent = captureMode === "wide" ? "Wide" : "Standard";
                 if (captureMode === "wide") {
-                    badge.style.color      = "rgba(62,207,142,0.8)";
+                    badge.style.color      = "rgba(62,207,142,0.45)";
                     badge.style.background = "rgba(62,207,142,0.08)";
-                    badge.style.border     = "1px solid rgba(62,207,142,0.2)";
+                    badge.style.border     = "1px solid rgba(62,207,142,0.18)";
                 }
                 badge.style.display = "inline-block";
             }
@@ -419,6 +476,11 @@ async function loadSession() {
             }, 4000);
             // Phase 2 — background-preload remaining frames silently
             preloadAll();
+            const ws = document.getElementById("welcome-screen");
+            if (ws) {
+                ws.style.opacity = "0";
+                setTimeout(() => ws.style.display = "none", 620);
+            }
         };
         firstImg.src = frameURLs[0];
 
@@ -876,6 +938,7 @@ function renderMinimap() {
         dot.style.cssText =
             `position:absolute;width:7px;height:7px;border-radius:50%;` +
             `background:rgba(62,207,142,1.0);` +
+            `box-shadow:0 0 0 2px rgba(62,207,142,0.20);` +
             `left:${currentDot.x}px;top:${currentDot.y}px;z-index:3;` +
             `transform:translate(-50%,-50%)`;
         el.appendChild(dot);
