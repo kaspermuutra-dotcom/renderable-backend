@@ -489,6 +489,11 @@ async function loadSession() {
         track("viewer_open");
 
     } catch (e) {
+        const ws = document.getElementById("welcome-screen");
+        if (ws) {
+            ws.style.opacity = "0";
+            setTimeout(() => ws.style.display = "none", 400);
+        }
         document.getElementById("loading").style.display = "none";
         document.getElementById("error-state").style.display = "flex";
         document.getElementById("error-msg").textContent = "This tour could not be loaded.";
