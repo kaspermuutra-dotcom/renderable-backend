@@ -53,7 +53,7 @@
         /* Lead badge on thumbnail */
         .lead-badge {
             position: absolute; top: 8px; right: 8px;
-            background: var(--accent); color: #fff;
+            background: var(--accent); color: #000;
             font-size: 11px; font-weight: 700;
             padding: 3px 8px; border-radius: 20px;
             display: none;
@@ -215,7 +215,13 @@ function renderScans(scans) {
                 ${badgeHTML}
             </div>
             <div class="card-body">
-                <div class="card-name" title="${esc(scan.scan_name)}">${esc(scan.scan_name)}</div>
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+                    <div class="card-name" style="margin-bottom:0;flex:1;min-width:0"
+                        title="${esc(scan.scan_name)}">${esc(scan.scan_name)}</div>
+                    <button class="btn" style="padding:3px 8px;font-size:12px;flex-shrink:0"
+                        onclick="openRename('${scan.scan_id}','${esc(scan.scan_name)}')"
+                        title="Rename">✎</button>
+                </div>
                 <div class="card-meta">
                     <span>${formatDate(scan.created_at)}</span>
                     <span>${scan.frame_count} frames</span>

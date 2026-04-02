@@ -3,374 +3,351 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Edit Scan — Renderable</title>
+    <title>Edit Listing — Renderable</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         :root {
             --bg: #0a0a0a; --surface: #141414; --surface2: #1c1c1c;
             --border: rgba(255,255,255,0.08); --text: #f0f0f0;
             --muted: rgba(255,255,255,0.45); --accent: #3ecf8e;
-            --danger: #e05252; --radius: 12px;
+            --green: #4caf7d; --danger: #e05252; --radius: 12px;
         }
         body { background: var(--bg); color: var(--text);
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-            min-height: 100vh; padding-bottom: 60px; }
+            min-height: 100vh; padding-bottom: 80px; }
 
-        header { padding: 16px 20px; border-bottom: 1px solid var(--border);
+        header { padding: 18px 20px; border-bottom: 1px solid var(--border);
             display: flex; align-items: center; gap: 14px;
-            position: sticky; top: 0; background: var(--bg); z-index: 10; }
+            position: sticky; top: 0; background: var(--bg); z-index: 10;
+            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
         header a { color: var(--muted); text-decoration: none; font-size: 13px;
             background: rgba(255,255,255,0.07); padding: 4px 10px;
-            border-radius: 20px; border: 1px solid var(--border); }
-        header h1 { font-size: 17px; font-weight: 600; }
+            border-radius: 20px; border: 1px solid var(--border); white-space: nowrap; }
+        header h1 { font-size: 17px; font-weight: 600; flex: 1;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        header .scan-id { font-size: 11px; color: var(--muted);
+            font-family: monospace; white-space: nowrap; }
 
-        /* ── Tab nav ── */
-        #tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border);
-            padding: 0 20px; }
-        .tab { padding: 12px 16px; font-size: 14px; font-weight: 500;
-            color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent;
-            transition: color 0.2s, border-color 0.2s; }
-        .tab.active { color: var(--text); border-bottom-color: var(--accent); }
+        .page { max-width: 620px; margin: 0 auto; padding: 24px 20px; }
 
-        /* ── Panels ── */
-        .panel { display: none; max-width: 620px; margin: 0 auto;
-            padding: 24px 20px; }
-        .panel.active { display: block; }
+        .section-label { font-size: 12px; font-weight: 600;
+            color: rgba(255,255,255,0.4); text-transform: uppercase;
+            letter-spacing: 0.8px; padding-bottom: 8px;
+            border-bottom: 1px solid var(--border); margin-bottom: 16px; }
 
-        /* ── Section header ── */
-        .section-hdr { font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.4);
-            text-transform: uppercase; letter-spacing: 0.8px;
-            padding-bottom: 8px; border-bottom: 1px solid var(--border);
-            margin-bottom: 16px; }
-
-        /* ── Room card ── */
-        .room-card { background: var(--surface2); border: 1px solid var(--border);
-            border-radius: var(--radius); padding: 14px 16px; margin-bottom: 10px; }
-        .room-card-row { display: flex; gap: 8px; align-items: center;
-            margin-bottom: 10px; }
-        .room-card-row:last-child { margin-bottom: 0; }
-
-        /* ── Annotation card ── */
-        .ann-card { background: var(--surface2); border: 1px solid var(--border);
-            border-radius: var(--radius); padding: 14px 16px; margin-bottom: 10px; }
-        .ann-header { display: flex; justify-content: space-between;
-            align-items: center; margin-bottom: 10px; }
-        .ann-frame-badge { font-size: 11px; font-weight: 600;
-            background: rgba(79,142,247,0.15); color: var(--accent);
-            padding: 2px 8px; border-radius: 10px; }
-
-        /* ── Inputs ── */
-        input, textarea, select {
+        .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+        .field label { font-size: 12px; font-weight: 600; color: var(--muted);
+            text-transform: uppercase; letter-spacing: 0.5px; }
+        .field input, .field textarea, .field select {
             background: var(--surface); border: 1px solid var(--border);
-            border-radius: 8px; padding: 9px 12px; color: var(--text);
-            font-size: 14px; outline: none; font-family: inherit;
+            border-radius: 10px; padding: 10px 12px; color: var(--text);
+            font-size: 14px; outline: none; width: 100%; font-family: inherit;
             transition: border-color 0.2s; }
-        input:focus, textarea:focus, select:focus { border-color: var(--accent); }
-        input::placeholder, textarea::placeholder { color: var(--muted); }
-        select option { background: var(--surface2); }
-        textarea { resize: vertical; min-height: 64px; width: 100%; }
+        .field input:focus, .field textarea:focus, .field select:focus {
+            border-color: var(--accent); }
+        .field input::placeholder, .field textarea::placeholder { color: var(--muted); }
+        .field textarea { resize: vertical; min-height: 90px; }
+        .field select option { background: var(--surface2); }
+        .field .hint { font-size: 11px; color: var(--muted); margin-top: 2px; }
 
-        .input-full { width: 100%; }
-        .input-sm   { width: 72px; }
-        .input-icon { width: 52px; text-align: center; }
+        .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
-        /* ── Buttons ── */
-        .btn { padding: 8px 14px; border-radius: 8px; border: 1px solid var(--border);
+        .section-gap { margin-top: 28px; }
+
+        #preview-card { background: var(--surface2); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 14px 16px; margin-bottom: 24px; }
+        #preview-card .preview-title { font-size: 18px; font-weight: 700;
+            margin-bottom: 4px; color: var(--text); min-height: 1.4em; }
+        #preview-card .preview-sub { font-size: 13px; color: var(--muted);
+            margin-bottom: 8px; min-height: 1.2em; }
+        #preview-card .preview-facts { display: flex; gap: 8px; flex-wrap: wrap; }
+        .preview-chip { font-size: 11px; background: rgba(255,255,255,0.07);
+            border: 1px solid var(--border); border-radius: 6px;
+            padding: 3px 10px; color: var(--muted); }
+
+        .save-bar { display: flex; align-items: center; gap: 14px; padding-top: 8px; }
+
+        .btn { padding: 10px 18px; border-radius: 8px; border: 1px solid var(--border);
             background: rgba(255,255,255,0.06); color: var(--text);
             font-size: 13px; font-weight: 500; cursor: pointer;
-            transition: background 0.15s; }
+            transition: background 0.15s; text-decoration: none;
+            display: inline-flex; align-items: center; gap: 6px; }
         .btn:hover { background: rgba(255,255,255,0.12); }
         .btn-accent { background: var(--accent); border-color: var(--accent); color: #000; }
-        .btn-accent:hover { background: #52d9a2; }
-        .btn-danger { background: none; border-color: transparent; color: var(--danger);
-            font-size: 16px; padding: 4px 8px; }
-        .btn-danger:hover { background: rgba(224,82,82,0.1); }
-        .btn-add { width: 100%; margin-top: 4px; border-style: dashed; }
+        .btn-accent:hover { background: #52d9a2; border-color: #52d9a2; }
 
-        /* ── Save bar ── */
-        .save-bar { display: flex; align-items: center; gap: 12px;
-            margin-top: 20px; }
-        #status-rooms, #status-ann { font-size: 13px; color: var(--muted); }
-        .ok { color: #4caf7d !important; }
-        .err { color: var(--danger) !important; }
+        #save-status { font-size: 13px; color: var(--muted); }
+        #save-status.ok  { color: var(--green); }
+        #save-status.err { color: var(--danger); }
 
-        /* ── Frame strip ── */
-        #frame-strip { display: flex; gap: 6px; overflow-x: auto;
-            padding: 4px 0 8px; margin-bottom: 16px; }
-        #frame-strip::-webkit-scrollbar { height: 4px; }
-        #frame-strip::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-        .fthumb { width: 64px; height: 48px; object-fit: cover; border-radius: 6px;
-            border: 2px solid transparent; cursor: pointer; flex-shrink: 0;
-            transition: border-color 0.15s; }
-        .fthumb.selected { border-color: var(--accent); }
-
-        .spinner { display: inline-block; width: 16px; height: 16px;
+        .spinner { display: inline-block; width: 14px; height: 14px;
             border: 2px solid rgba(255,255,255,0.1); border-top-color: var(--accent);
-            border-radius: 50%; animation: spin 0.75s linear infinite; vertical-align: middle; }
+            border-radius: 50%; animation: spin 0.75s linear infinite;
+            vertical-align: middle; margin-right: 4px; }
+        .spinner-lg { width: 22px; height: 22px;
+            border: 2px solid rgba(255,255,255,0.1); border-top-color: var(--accent);
+            border-radius: 50%; animation: spin 0.75s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
+
+        #loading { display: flex; align-items: center; justify-content: center;
+            min-height: 40vh; gap: 12px; color: var(--muted); font-size: 14px; }
+        .hidden { display: none !important; }
     </style>
 </head>
 <body>
 
 <header>
     <a href="/scans">← Library</a>
-    <h1>Edit Scan</h1>
+    <h1 id="page-title">Edit Listing</h1>
+    <span class="scan-id" id="scan-id-label"></span>
 </header>
 
-<div id="tabs">
-    <div class="tab active" onclick="switchTab('rooms')">Rooms</div>
-    <div class="tab"        onclick="switchTab('annotations')">Annotations</div>
+<div id="loading">
+    <div class="spinner-lg"></div>
+    Loading listing...
 </div>
 
-<!-- ── Rooms panel ── -->
-<div class="panel active" id="panel-rooms">
-    <p class="section-hdr">Room Labels</p>
-    <p style="font-size:13px;color:var(--muted);margin-bottom:16px">
-        Define which frames belong to each room. Frame indices start at 0.
-    </p>
-    <div id="rooms-list"></div>
-    <button class="btn btn-add" onclick="addRoom()">+ Add Room</button>
-    <div class="save-bar">
-        <button class="btn btn-accent" onclick="saveRooms()">Save Rooms</button>
-        <span id="status-rooms"></span>
+<div id="main" class="hidden">
+<div class="page">
+
+    <!-- Live preview of the share page headline -->
+    <div id="preview-card">
+        <div class="preview-title" id="prev-title">—</div>
+        <div class="preview-sub"   id="prev-sub"></div>
+        <div class="preview-facts" id="prev-facts"></div>
     </div>
+
+    <!-- ── Property presentation ── -->
+    <div class="section-label">Property Presentation</div>
+
+    <div class="field">
+        <label>Listing Title</label>
+        <input id="f-title" type="text" placeholder="e.g. Spacious 3BR with Garden"
+            oninput="updatePreview()">
+        <span class="hint">Main headline shown on the share page and PDF report.</span>
+    </div>
+
+    <div class="field">
+        <label>Subtitle</label>
+        <input id="f-subtitle" type="text"
+            placeholder="e.g. Recently renovated, move-in ready"
+            oninput="updatePreview()">
+    </div>
+
+    <div class="field">
+        <label>Address</label>
+        <input id="f-address" type="text"
+            placeholder="e.g. Pikk 12, Tallinn, Estonia"
+            oninput="updatePreview()">
+    </div>
+
+    <div class="field">
+        <label>Description</label>
+        <textarea id="f-desc"
+            placeholder="Describe the property — layout, condition, highlights..."></textarea>
+    </div>
+
+    <!-- ── Property details ── -->
+    <div class="section-label section-gap">Property Details</div>
+
+    <div class="field">
+        <label>Property Type</label>
+        <select id="f-type" oninput="updatePreview()">
+            <option value="">— Select type —</option>
+            <option value="apartment">Apartment</option>
+            <option value="house">House</option>
+            <option value="villa">Villa</option>
+            <option value="studio">Studio</option>
+            <option value="office">Office</option>
+            <option value="commercial">Commercial</option>
+            <option value="land">Land</option>
+            <option value="other">Other</option>
+        </select>
+    </div>
+
+    <div class="row-2">
+        <div class="field">
+            <label>Rooms</label>
+            <input id="f-rooms" type="number" min="0" max="99"
+                placeholder="e.g. 3" oninput="updatePreview()">
+        </div>
+        <div class="field">
+            <label>Area (m²)</label>
+            <input id="f-area" type="number" min="0"
+                placeholder="e.g. 87" oninput="updatePreview()">
+        </div>
+    </div>
+
+    <!-- ── Agent / contact ── -->
+    <div class="section-label section-gap">Agent Contact</div>
+
+    <div class="field">
+        <label>Agent / Contact Name</label>
+        <input id="f-cname" type="text" placeholder="e.g. Mari Tamm">
+    </div>
+
+    <div class="row-2">
+        <div class="field">
+            <label>Email</label>
+            <input id="f-cemail" type="email" placeholder="agent@agency.com">
+        </div>
+        <div class="field">
+            <label>Phone</label>
+            <input id="f-cphone" type="tel" placeholder="+372 5555 5555">
+        </div>
+    </div>
+
+    <div class="field">
+        <label>Agency / Brand Name</label>
+        <input id="f-brand" type="text" placeholder="e.g. Tallinn Kinnisvara">
+        <span class="hint">Shown in the share page footer and PDF report.</span>
+    </div>
+
+    <!-- ── Save ── -->
+    <div class="save-bar section-gap">
+        <button class="btn btn-accent" onclick="saveListing()">Save Listing</button>
+        <span id="save-status"></span>
+    </div>
+
+    <!-- ── Quick links ── -->
+    <div class="section-label section-gap">Quick Links</div>
+    <div style="display:flex;flex-wrap:wrap;gap:10px">
+        <a class="btn" id="link-share" href="#" target="_blank">View Share Page</a>
+        <a class="btn" id="link-view"  href="#" target="_blank">Open Viewer</a>
+        <a class="btn" id="link-edit"  href="#">Edit Rooms &amp; Annotations</a>
+    </div>
+
 </div>
-
-<!-- ── Annotations panel ── -->
-<div class="panel" id="panel-annotations">
-    <p class="section-hdr">Frame Annotations</p>
-    <p style="font-size:13px;color:var(--muted);margin-bottom:12px">
-        Add notes, features, or highlights to specific frames.
-    </p>
-
-    <!-- Frame thumbnail strip -->
-    <div id="frame-strip"></div>
-
-    <div id="annotations-list"></div>
-    <button class="btn btn-add" onclick="addAnnotation()">+ Add Annotation</button>
-    <div class="save-bar">
-        <button class="btn btn-accent" onclick="saveAnnotations()">Save Annotations</button>
-        <span id="status-ann"></span>
-    </div>
 </div>
 
 <script>
 const SCAN_ID = "{{ scan_id }}";
-let frameCount = 0;
-let frameURLs  = [];
-let rooms      = [];
-let annotations = [];
-
-const ANNOTATION_TYPES = ["info","feature","upgrade","caution","access"];
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 async function init() {
     try {
         const res = await fetch(`/api/manifest/${SCAN_ID}`);
+        if (!res.ok) throw new Error(`Server error ${res.status}`);
         const manifest = await res.json();
-        frameCount = manifest.frame_count || 0;
-        frameURLs  = manifest.frameURLs   || [];
-        rooms      = manifest.rooms       || [];
-        annotations = manifest.annotations || [];
-        buildFrameStrip();
-        renderRooms();
-        renderAnnotations();
+        if (manifest.error) throw new Error(manifest.error);
+
+        const listing = manifest.listing || {};
+
+        document.getElementById("scan-id-label").textContent = SCAN_ID;
+        document.getElementById("page-title").textContent =
+            (manifest.scan_name || SCAN_ID) + " — Edit Listing";
+
+        setVal("f-title",   listing.listing_title    || "");
+        setVal("f-subtitle",listing.listing_subtitle  || "");
+        setVal("f-address", listing.address           || "");
+        setVal("f-desc",    listing.description       || "");
+        setVal("f-type",    listing.property_type     || "");
+        setVal("f-rooms",   listing.room_count   != null ? String(listing.room_count) : "");
+        setVal("f-area",    listing.area_sqm     != null ? String(listing.area_sqm)   : "");
+        setVal("f-cname",   listing.contact_name  || "");
+        setVal("f-cemail",  listing.contact_email || "");
+        setVal("f-cphone",  listing.contact_phone || "");
+        setVal("f-brand",   listing.branding_name || "");
+
+        document.getElementById("link-share").href = `/share/${SCAN_ID}`;
+        document.getElementById("link-view").href  = `/view/${SCAN_ID}`;
+        document.getElementById("link-edit").href  = `/scan/${SCAN_ID}/edit`;
+
+        updatePreview();
+
+        document.getElementById("loading").style.display = "none";
+        document.getElementById("main").classList.remove("hidden");
+
     } catch (e) {
-        document.body.innerHTML += `<p style="color:#e05252;padding:20px">Failed to load: ${e.message}</p>`;
+        document.getElementById("loading").innerHTML =
+            `<span style="color:#e05252">Failed to load: ${e.message}</span>`;
     }
 }
 
-// ── Tab switching ─────────────────────────────────────────────────────────────
+// ── Save ──────────────────────────────────────────────────────────────────────
 
-function switchTab(name) {
-    document.querySelectorAll(".tab").forEach((t, i) => {
-        t.classList.toggle("active", ["rooms","annotations"][i] === name);
-    });
-    document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
-    document.getElementById(`panel-${name}`).classList.add("active");
-}
+async function saveListing() {
+    const statusEl = document.getElementById("save-status");
+    statusEl.innerHTML = '<span class="spinner"></span> Saving...';
+    statusEl.className = "";
 
-// ── Frame strip ───────────────────────────────────────────────────────────────
+    const body = {
+        listing_title:    getVal("f-title").trim(),
+        listing_subtitle: getVal("f-subtitle").trim(),
+        address:          getVal("f-address").trim(),
+        description:      getVal("f-desc").trim(),
+        property_type:    getVal("f-type").trim(),
+        contact_name:     getVal("f-cname").trim(),
+        contact_email:    getVal("f-cemail").trim(),
+        contact_phone:    getVal("f-cphone").trim(),
+        branding_name:    getVal("f-brand").trim(),
+    };
 
-function buildFrameStrip() {
-    const strip = document.getElementById("frame-strip");
-    strip.innerHTML = "";
-    frameURLs.forEach((url, i) => {
-        const img = document.createElement("img");
-        img.className = "fthumb";
-        img.src = url;
-        img.title = `Frame ${i}`;
-        img.onclick = () => selectFrame(i);
-        strip.appendChild(img);
-    });
-}
+    const rooms = parseInt(getVal("f-rooms"), 10);
+    const area  = parseFloat(getVal("f-area"));
+    if (!isNaN(rooms) && rooms >= 0) body.room_count = rooms;
+    if (!isNaN(area)  && area  >= 0) body.area_sqm   = area;
 
-function selectFrame(index) {
-    document.querySelectorAll(".fthumb").forEach((img, i) => {
-        img.classList.toggle("selected", i === index);
-    });
-    // Set frame_index on the last annotation or the new annotation form
-    const cards = document.querySelectorAll(".ann-card");
-    if (cards.length > 0) {
-        const last = cards[cards.length - 1];
-        const fi = last.querySelector(".ann-frame-input");
-        if (fi && fi.value === "") fi.value = index;
-    }
-}
-
-// ── Rooms ─────────────────────────────────────────────────────────────────────
-
-function renderRooms() {
-    const list = document.getElementById("rooms-list");
-    list.innerHTML = "";
-    rooms.forEach((room, i) => list.appendChild(makeRoomCard(room, i)));
-}
-
-function makeRoomCard(room, i) {
-    const div = document.createElement("div");
-    div.className = "room-card";
-    div.innerHTML = `
-        <div class="room-card-row">
-            <input class="input-icon" type="text" value="${esc(room.icon && !/\p{Emoji}/u.test(room.icon) ? room.icon : '')}"
-                placeholder="—" title="Short label" oninput="rooms[${i}].icon=this.value">
-            <input class="input-full" type="text" value="${esc(room.name)}"
-                placeholder="Room name" oninput="rooms[${i}].name=this.value">
-            <button class="btn btn-danger" onclick="removeRoom(${i})">✕</button>
-        </div>
-        <div class="room-card-row" style="gap:12px;align-items:center">
-            <label style="font-size:12px;color:var(--muted);white-space:nowrap">Frames</label>
-            <input class="input-sm" type="number" min="0" max="${frameCount-1}"
-                value="${room.start_frame}" placeholder="From"
-                oninput="rooms[${i}].start_frame=+this.value">
-            <span style="color:var(--muted);font-size:13px">→</span>
-            <input class="input-sm" type="number" min="0" max="${frameCount-1}"
-                value="${room.end_frame}" placeholder="To"
-                oninput="rooms[${i}].end_frame=+this.value">
-            <span style="font-size:12px;color:var(--muted)">(0–${frameCount-1})</span>
-        </div>
-    `;
-    return div;
-}
-
-function addRoom() {
-    rooms.push({ id: newId(), name: "", start_frame: 0, end_frame: 0, icon: "" });
-    renderRooms();
-}
-
-function removeRoom(i) {
-    rooms.splice(i, 1);
-    renderRooms();
-}
-
-async function saveRooms() {
-    setStatus("status-rooms", '<span class="spinner"></span>', "");
     try {
-        const res = await fetch(`/api/scans/${SCAN_ID}/rooms`, {
-            method: "PUT",
+        const res = await fetch(`/api/scans/${SCAN_ID}/listing`, {
+            method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(rooms)
+            body: JSON.stringify(body)
         });
-        if (!res.ok) throw new Error("Save failed");
-        setStatus("status-rooms", "Saved", "ok");
+        if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.error || `Server error ${res.status}`);
+        }
+
+        statusEl.textContent = "Saved";
+        statusEl.className = "ok";
+        if (body.listing_title) {
+            document.getElementById("page-title").textContent =
+                body.listing_title + " — Edit Listing";
+        }
+        setTimeout(() => { statusEl.textContent = ""; statusEl.className = ""; }, 3000);
+
     } catch (e) {
-        setStatus("status-rooms", "✗ " + e.message, "err");
+        statusEl.textContent = "Failed: " + e.message;
+        statusEl.className = "err";
     }
 }
 
-// ── Annotations ───────────────────────────────────────────────────────────────
+// ── Live preview ──────────────────────────────────────────────────────────────
 
-function renderAnnotations() {
-    const list = document.getElementById("annotations-list");
-    list.innerHTML = "";
-    annotations.forEach((ann, i) => list.appendChild(makeAnnCard(ann, i)));
-}
+function updatePreview() {
+    const title = getVal("f-title").trim();
+    document.getElementById("prev-title").textContent = title || "—";
 
-function makeAnnCard(ann, i) {
-    const typeOptions = ANNOTATION_TYPES.map(t =>
-        `<option value="${t}" ${ann.type === t ? "selected" : ""}>${t}</option>`
-    ).join("");
+    const sub = getVal("f-subtitle").trim() || getVal("f-address").trim();
+    document.getElementById("prev-sub").textContent = sub;
 
-    const div = document.createElement("div");
-    div.className = "ann-card";
-    div.innerHTML = `
-        <div class="ann-header">
-            <span class="ann-frame-badge">Frame
-                <input class="ann-frame-input" type="number" min="0" max="${frameCount-1}"
-                    value="${ann.frame_index}"
-                    style="width:44px;padding:2px 4px;background:transparent;
-                           border:none;border-bottom:1px solid var(--accent);
-                           color:var(--accent);font-weight:600;font-size:11px;outline:none"
-                    oninput="annotations[${i}].frame_index=+this.value">
-            </span>
-            <div style="display:flex;gap:8px;align-items:center">
-                <select style="padding:4px 8px;font-size:12px"
-                    onchange="annotations[${i}].type=this.value">
-                    ${typeOptions}
-                </select>
-                <button class="btn btn-danger" onclick="removeAnnotation(${i})">✕</button>
-            </div>
-        </div>
-        <input class="input-full" type="text" value="${esc(ann.title)}"
-            placeholder="Title / headline"
-            oninput="annotations[${i}].title=this.value"
-            style="margin-bottom:8px">
-        <textarea placeholder="Optional details..."
-            oninput="annotations[${i}].body=this.value">${esc(ann.body)}</textarea>
-    `;
-    return div;
-}
+    const facts = [];
+    const type  = getVal("f-type");
+    const rooms = getVal("f-rooms").trim();
+    const area  = getVal("f-area").trim();
+    if (type)  facts.push(type.charAt(0).toUpperCase() + type.slice(1));
+    if (rooms) facts.push(rooms + " rooms");
+    if (area)  facts.push(area + " m²");
 
-function addAnnotation() {
-    const frameIndex = parseInt(
-        document.querySelector(".fthumb.selected")?.title?.replace("Frame ", "") || "0"
-    );
-    annotations.push({
-        id: newId(), frame_index: frameIndex,
-        title: "", body: "", type: "info"
-    });
-    renderAnnotations();
-    // Scroll to bottom
-    document.getElementById("annotations-list").lastElementChild
-        ?.scrollIntoView({ behavior: "smooth" });
-}
-
-function removeAnnotation(i) {
-    annotations.splice(i, 1);
-    renderAnnotations();
-}
-
-async function saveAnnotations() {
-    setStatus("status-ann", '<span class="spinner"></span>', "");
-    try {
-        const res = await fetch(`/api/scans/${SCAN_ID}/annotations`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(annotations)
-        });
-        if (!res.ok) throw new Error("Save failed");
-        setStatus("status-ann", "Saved", "ok");
-    } catch (e) {
-        setStatus("status-ann", "✗ " + e.message, "err");
-    }
+    document.getElementById("prev-facts").innerHTML = facts
+        .map(f => `<span class="preview-chip">${esc(f)}</span>`)
+        .join("");
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function setStatus(id, msg, cls) {
-    const el = document.getElementById(id);
-    el.innerHTML = msg;
-    el.className = cls;
-    if (cls === "ok") setTimeout(() => { el.textContent = ""; }, 3000);
+function getVal(id) { return document.getElementById(id)?.value ?? ""; }
+function setVal(id, val) { const el = document.getElementById(id); if (el) el.value = val; }
+function esc(s) {
+    return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
 }
 
-function newId() { return Math.random().toString(36).slice(2, 10); }
-
-function esc(str) {
-    return String(str || "")
-        .replace(/&/g, "&amp;").replace(/"/g, "&quot;")
-        .replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
+// Cmd/Ctrl+S to save
+document.addEventListener("keydown", e => {
+    if ((e.metaKey || e.ctrlKey) && e.key === "s") { e.preventDefault(); saveListing(); }
+});
 
 init();
 </script>

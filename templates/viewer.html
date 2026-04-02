@@ -297,7 +297,7 @@ function track(eventType, extra = {}) {
         ...extra
     };
     navigator.sendBeacon
-        ? navigator.sendBeacon("/analytics/event", JSON.stringify(payload))
+        ? navigator.sendBeacon("/analytics/event", new Blob([JSON.stringify(payload)], {type: "application/json"}))
         : fetch("/analytics/event", {
             method: "POST",
             headers: { "Content-Type": "application/json" },

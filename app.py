@@ -581,7 +581,7 @@ def get_manifest(scan_id):
     if manifest is None: return jsonify({"error": "manifest not found"}), 404
     frames = manifest.get("frames", [])
     manifest["frameURLs"] = [
-        f"/uploads/{scan_id}/frames/{f['filename'] if isinstance(f, dict) else f}"
+        f"/uploads/{scan_id}/frames/{f.get('filename', '') if isinstance(f, dict) else f}"
         for f in frames
     ]
     thumbnail = manifest.get("thumbnail_filename")
