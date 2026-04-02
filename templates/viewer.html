@@ -341,6 +341,18 @@ let playStepCount    = 0;      // steps taken in current autoplay session (loop 
 let scanAnalysis     = null;   // result of computeScanAnalysis(), set after loadSession()
 let frameQuality     = [];    // per-frame quality score 0–1, aligned with frameObjects index
 
+// ── Strip / panoramic physics state ──────────────────────────────────────────
+let stripPos      = 0;     // continuous position in frame-space (fractional ok, e.g. 1.5 = halfway between 1 and 2)
+let stripVel      = 0;     // velocity in frame-units per 16 ms tick (positive = forward / left-drag)
+let stripRafId    = null;  // requestAnimationFrame id for physics / snap loop
+let stripMode     = false; // true when frameURLs.length >= STRIP_MIN_FRAMES
+let isStripActive = false; // true while drag or momentum is running (suppresses DOM-heavy updateUI paths)
+let dragStartPos  = 0;     // stripPos frozen at the start of each drag gesture
+let dragStartX    = 0;     // screen X frozen at drag start (touch and mouse)
+let dragHistory   = [];    // [{t, x}] recent samples — used for velocity estimation on release
+
+const STRIP_MIN_FRAMES = 4; // minimum frames before panoramic strip mode activates
+
 const imgCurrent = document.getElementById("frame-current");
 const imgNext    = document.getElementById("frame-next");
 
@@ -476,6 +488,8 @@ async function loadSession() {
             }, 4000);
             // Phase 2 — background-preload remaining frames silently
             preloadAll();
+            // Initialise strip mode now that frameURLs length is known
+            initStrip();
             const ws = document.getElementById("welcome-screen");
             if (ws) {
                 ws.style.opacity = "0";
@@ -515,11 +529,15 @@ function preloadAll() {
 // ── Set frame ─────────────────────────────────────────────────────────────────
 
 function setFrame(index) {
-    current = clamp(index, 0, frameURLs.length - 1);
+    current  = clamp(index, 0, frameURLs.length - 1);
+    stripPos = current; // keep strip state in sync with programmatic jumps
+    if (stripRafId) { cancelAnimationFrame(stripRafId); stripRafId = null; }
+    isStripActive = false;
     imgCurrent.style.transition = "none";
     imgCurrent.src = frameURLs[current];
     imgCurrent.style.transform = "scale(1) translateX(0px)";
     imgCurrent.style.opacity = "1";
+    imgNext.style.transition = "none";
     imgNext.style.opacity = "0";
     updateUI();
     trackFrame(current);
@@ -529,6 +547,9 @@ function setFrame(index) {
 
 function goTo(index, dir = "forward") {
     if (isAnimating) return;
+    // Cancel any running strip physics so CSS transitions below take over cleanly
+    if (stripRafId) { cancelAnimationFrame(stripRafId); stripRafId = null; }
+    isStripActive = false;
     const target = clamp(index, 0, frameURLs.length - 1);
     if (target === current) return;
     isAnimating = true;
@@ -575,6 +596,7 @@ function goTo(index, dir = "forward") {
         imgNext.style.transition   = "none";
         imgNext.style.opacity      = "0";
         current     = target;
+        stripPos    = target; // keep strip state aligned after animated transition
         isAnimating = false;
         updateUI();
         trackFrame(current);
@@ -1033,90 +1055,304 @@ function stopPlay() {
     document.getElementById("play-btn").innerHTML = "&#9654;";
 }
 
-// ── Touch drag ────────────────────────────────────────────────────────────────
+// ── Strip physics ─────────────────────────────────────────────────────────────
 
-let touchStartX = 0, touchStartY = 0, dragX = 0, isDragging = false;
+function initStrip() {
+    stripMode = frameURLs.length >= STRIP_MIN_FRAMES;
+    stripPos  = 0;
+    stripVel  = 0;
+}
+
+// Renders the panoramic strip at continuous position `pos` (frame-space float).
+// imgCurrent slides left as imgNext enters from the right — creates the feel of
+// a physical film strip being dragged across the viewport.
+function scrubTo(pos) {
+    const n = frameURLs.length;
+    let p = pos;
+    if (isCircular) {
+        p = ((p % n) + n) % n;
+    } else {
+        p = Math.max(0, Math.min(n - 1, p));
+    }
+    stripPos = p;
+
+    const iA   = Math.floor(p) % n;
+    // For non-circular at last frame, next frame is clamped to same index so
+    // imgNext stays hidden (frac will be 0 at the clamped boundary).
+    const iB   = isCircular ? (iA + 1) % n : Math.min(iA + 1, n - 1);
+    const frac = p - Math.floor(p);
+    const vw   = window.innerWidth;
+
+    imgCurrent.src = frameURLs[iA];
+    imgCurrent.style.transition = "none";
+    imgCurrent.style.transform  = `translateX(${-frac * vw}px) scale(1)`;
+    imgCurrent.style.opacity    = "1";
+
+    if (frac > 0.005 && iA !== iB) {
+        imgNext.src = frameURLs[iB];
+        imgNext.style.transition = "none";
+        imgNext.style.transform  = `translateX(${(1 - frac) * vw}px) scale(1)`;
+        imgNext.style.opacity    = "1";
+    } else {
+        imgNext.style.transition = "none";
+        imgNext.style.opacity    = "0";
+    }
+
+    // Update frame counter and lightweight UI when the display frame changes.
+    // Heavy rebuilds (hotspots, minimap) are suppressed during active scrub.
+    const displayFrame = Math.round(p) % n;
+    if (displayFrame !== current) {
+        current = displayFrame;
+        document.getElementById("progress").textContent = `${current + 1} / ${n}`;
+        updateDots();
+        updateRoomStrip(current);
+        updateCompass(current);
+        updateRoomLabel(current);
+        updateAnnotationPanel(current);
+        trackFrame(current);
+    }
+}
+
+// Restore imgCurrent to identity transform (used on drag abort).
+function resetStrip() {
+    imgCurrent.style.transition = "transform 0.3s cubic-bezier(0.34,1.56,0.64,1), opacity 0.3s ease";
+    imgCurrent.style.transform  = "scale(1) translateX(0px)";
+    imgNext.style.transition    = "opacity 0.25s ease";
+    imgNext.style.opacity       = "0";
+}
+
+// Derive drag velocity from recent history samples.
+// Returns frame-units per 16 ms tick (positive = forward = dragging left).
+function calcDragVelocity() {
+    if (dragHistory.length < 2) return 0;
+    const last = dragHistory[dragHistory.length - 1];
+    const prev = dragHistory[Math.max(0, dragHistory.length - 4)];
+    const dt   = last.t - prev.t;
+    const dx   = last.x - prev.x;
+    if (dt <= 0 || dt > 300) return 0;
+    // px/ms → frame-units/16ms tick  (drag left = negative dx = positive direction)
+    return -(dx / window.innerWidth) / (dt / 16);
+}
+
+// Physics momentum loop: applies stripVel with exponential decay until it drops
+// below threshold, then hands off to animateSnapTo().
+function startMomentum() {
+    if (stripRafId) cancelAnimationFrame(stripRafId);
+    isStripActive = true;
+    let lastTime  = null;
+    const DECAY   = 0.88; // per 16 ms tick (~60 fps)
+
+    function step(now) {
+        if (lastTime === null) { lastTime = now; stripRafId = requestAnimationFrame(step); return; }
+        const dt    = Math.min(now - lastTime, 50); // cap to prevent large jumps after tab switch
+        lastTime    = now;
+        const ticks = dt / 16;
+
+        stripPos += stripVel * ticks;
+        stripVel *= Math.pow(DECAY, ticks);
+
+        const n = frameURLs.length;
+        if (!isCircular) {
+            if (stripPos <= 0)     { stripPos = 0;     stripVel = 0; }
+            if (stripPos >= n - 1) { stripPos = n - 1; stripVel = 0; }
+        }
+
+        scrubTo(stripPos);
+
+        if (Math.abs(stripVel) < 0.008) {
+            const nearest = Math.round(stripPos);
+            const snapped = isCircular ? ((nearest % n) + n) % n : clamp(nearest, 0, n - 1);
+            animateSnapTo(snapped);
+            return;
+        }
+        stripRafId = requestAnimationFrame(step);
+    }
+    stripRafId = requestAnimationFrame(step);
+}
+
+// Spring-eased snap to exact integer frame index. Replaces any running rAF loop.
+// Calls setFrame() at the end to restore full UI (hotspots, minimap, etc.).
+function animateSnapTo(targetIndex) {
+    if (stripRafId) cancelAnimationFrame(stripRafId);
+    const n = frameURLs.length;
+
+    function snapStep() {
+        let diff = targetIndex - stripPos;
+        // Take shortest arc on circular strip
+        if (isCircular) {
+            if (diff >  n / 2) diff -= n;
+            if (diff < -n / 2) diff += n;
+        }
+        if (Math.abs(diff) < 0.003) {
+            stripPos = targetIndex;
+            setFrame(targetIndex % n); // setFrame resets isStripActive and renders full UI
+            return;
+        }
+        stripPos += diff * 0.22; // spring coefficient — higher = snappier
+        scrubTo(stripPos);
+        stripRafId = requestAnimationFrame(snapStep);
+    }
+    snapStep();
+}
+
+// ── Touch drag (strip-aware) ──────────────────────────────────────────────────
+
+let touchStartY = 0, isDragging = false;
 
 document.getElementById("viewer").addEventListener("touchstart", e => {
-    touchStartX = e.touches[0].clientX; touchStartY = e.touches[0].clientY;
-    dragX = 0; isDragging = true; stopPlay();
+    const touch  = e.touches[0];
+    dragStartX   = touch.clientX;
+    touchStartY  = touch.clientY;
+    dragStartPos = isCircular ? stripPos : clamp(Math.round(stripPos), 0, frameURLs.length - 1);
+    stripPos     = dragStartPos;
+    isDragging   = true;
+    dragHistory  = [{ t: Date.now(), x: touch.clientX }];
+    if (stripRafId) { cancelAnimationFrame(stripRafId); stripRafId = null; }
+    isStripActive = true;
+    stopPlay();
     imgCurrent.style.transition = "none";
+    imgNext.style.transition    = "none";
+    // Suppress hotspot clicks while dragging
+    document.getElementById("hotspots").style.pointerEvents = "none";
 }, { passive: true });
 
 document.getElementById("viewer").addEventListener("touchmove", e => {
     if (!isDragging) return;
-    dragX = e.touches[0].clientX - touchStartX;
-    const dragY = e.touches[0].clientY - touchStartY;
-    if (Math.abs(dragX) < Math.abs(dragY)) return;
-    const ratio = dragX / window.innerWidth;
-    const scale = 1 - Math.abs(ratio) * 0.04;
-    imgCurrent.style.transform = `scale(${scale}) translateX(${dragX * 0.45}px)`;
-    const nb = getNeighbors(current);
-    if (dragX < 0 && nb.forward !== undefined) {
-        imgNext.src = frameURLs[nb.forward]; imgNext.style.transition = "none";
-        imgNext.style.opacity = String(Math.min(Math.abs(ratio) * 1.8, 0.9));
-        imgNext.style.transform = `scale(1.03) translateX(${20 + dragX * 0.15}px)`;
-    } else if (dragX > 0 && nb.back !== undefined) {
-        imgNext.src = frameURLs[nb.back]; imgNext.style.transition = "none";
-        imgNext.style.opacity = String(Math.min(Math.abs(ratio) * 1.8, 0.9));
-        imgNext.style.transform = `scale(1.03) translateX(${-20 + dragX * 0.15}px)`;
+    const touch = e.touches[0];
+    const dx    = touch.clientX - dragStartX;
+    const dy    = touch.clientY - touchStartY;
+
+    // Abort if gesture is primarily vertical (allow native scroll on overlays)
+    if (dragHistory.length < 4 && Math.abs(dy) > Math.abs(dx) + 8) {
+        isDragging = false;
+        isStripActive = false;
+        document.getElementById("hotspots").style.pointerEvents = "";
+        resetStrip();
+        return;
+    }
+
+    dragHistory.push({ t: Date.now(), x: touch.clientX });
+    if (dragHistory.length > 8) dragHistory.shift();
+
+    if (stripMode) {
+        scrubTo(dragStartPos - dx / window.innerWidth);
+    } else {
+        // Fallback parallax preview for short scans (< STRIP_MIN_FRAMES)
+        const nb    = getNeighbors(current);
+        const ratio = dx / window.innerWidth;
+        const scale = 1 - Math.abs(ratio) * 0.04;
+        imgCurrent.style.transform = `scale(${scale}) translateX(${dx * 0.45}px)`;
+        if (dx < 0 && nb.forward !== undefined) {
+            imgNext.src = frameURLs[nb.forward];
+            imgNext.style.transition = "none";
+            imgNext.style.opacity = String(Math.min(Math.abs(ratio) * 1.8, 0.9));
+            imgNext.style.transform = `scale(1.03) translateX(${20 + dx * 0.15}px)`;
+        } else if (dx > 0 && nb.back !== undefined) {
+            imgNext.src = frameURLs[nb.back];
+            imgNext.style.transition = "none";
+            imgNext.style.opacity = String(Math.min(Math.abs(ratio) * 1.8, 0.9));
+            imgNext.style.transform = `scale(1.03) translateX(${-20 + dx * 0.15}px)`;
+        }
     }
 }, { passive: true });
 
 document.getElementById("viewer").addEventListener("touchend", () => {
     if (!isDragging) return;
     isDragging = false;
-    const threshold = window.innerWidth * 0.22;
-    const nb = getNeighbors(current);
-    if      (dragX < -threshold && nb.forward !== undefined) goTo(nb.forward, "forward");
-    else if (dragX >  threshold && nb.back    !== undefined) goTo(nb.back,    "back");
-    else {
-        imgCurrent.style.transition = "transform 0.3s cubic-bezier(0.34,1.56,0.64,1), opacity 0.3s ease";
-        imgCurrent.style.transform  = "scale(1) translateX(0px)";
-        imgNext.style.transition    = "opacity 0.25s ease";
-        imgNext.style.opacity       = "0";
+    document.getElementById("hotspots").style.pointerEvents = "";
+
+    if (stripMode) {
+        stripVel = calcDragVelocity();
+        if (Math.abs(stripVel) > 0.015) {
+            startMomentum();
+        } else {
+            const n       = frameURLs.length;
+            const nearest = Math.round(stripPos);
+            animateSnapTo(isCircular ? ((nearest % n) + n) % n : clamp(nearest, 0, n - 1));
+        }
+    } else {
+        // Fallback: threshold-based snap for short scans
+        const dx  = dragHistory.length ? dragHistory[dragHistory.length - 1].x - dragStartX : 0;
+        const nb  = getNeighbors(current);
+        const thr = window.innerWidth * 0.22;
+        if      (dx < -thr && nb.forward !== undefined) goTo(nb.forward, "forward");
+        else if (dx >  thr && nb.back    !== undefined) goTo(nb.back,    "back");
+        else resetStrip();
+        isStripActive = false;
     }
 }, { passive: true });
 
-// ── Mouse drag ────────────────────────────────────────────────────────────────
+// ── Mouse drag (strip-aware) ──────────────────────────────────────────────────
 
-let mouseStartX = 0, mouseDragX = 0, isMouseDragging = false;
+let isMouseDragging = false;
 
 document.getElementById("viewer").addEventListener("mousedown", e => {
-    mouseStartX = e.clientX; mouseDragX = 0;
-    isMouseDragging = true; stopPlay();
+    dragStartX   = e.clientX;
+    dragStartPos = isCircular ? stripPos : clamp(Math.round(stripPos), 0, frameURLs.length - 1);
+    stripPos     = dragStartPos;
+    isMouseDragging = true;
+    dragHistory  = [{ t: Date.now(), x: e.clientX }];
+    if (stripRafId) { cancelAnimationFrame(stripRafId); stripRafId = null; }
+    isStripActive = true;
+    stopPlay();
     imgCurrent.style.transition = "none";
+    imgNext.style.transition    = "none";
+    document.getElementById("hotspots").style.pointerEvents = "none";
 });
 
 document.addEventListener("mousemove", e => {
     if (!isMouseDragging) return;
-    mouseDragX = e.clientX - mouseStartX;
-    const ratio = mouseDragX / window.innerWidth;
-    const scale = 1 - Math.abs(ratio) * 0.03;
-    imgCurrent.style.transform = `scale(${scale}) translateX(${mouseDragX * 0.4}px)`;
-    const nb = getNeighbors(current);
-    if (mouseDragX < 0 && nb.forward !== undefined) {
-        imgNext.src = frameURLs[nb.forward]; imgNext.style.transition = "none";
-        imgNext.style.opacity = String(Math.min(Math.abs(ratio) * 1.8, 0.9));
-        imgNext.style.transform = `scale(1.03) translateX(${20 + mouseDragX * 0.15}px)`;
-    } else if (mouseDragX > 0 && nb.back !== undefined) {
-        imgNext.src = frameURLs[nb.back]; imgNext.style.transition = "none";
-        imgNext.style.opacity = String(Math.min(Math.abs(ratio) * 1.8, 0.9));
-        imgNext.style.transform = `scale(1.03) translateX(${-20 + mouseDragX * 0.15}px)`;
+    const dx = e.clientX - dragStartX;
+    dragHistory.push({ t: Date.now(), x: e.clientX });
+    if (dragHistory.length > 8) dragHistory.shift();
+
+    if (stripMode) {
+        scrubTo(dragStartPos - dx / window.innerWidth);
+    } else {
+        const nb    = getNeighbors(current);
+        const ratio = dx / window.innerWidth;
+        const scale = 1 - Math.abs(ratio) * 0.03;
+        imgCurrent.style.transform = `scale(${scale}) translateX(${dx * 0.4}px)`;
+        if (dx < 0 && nb.forward !== undefined) {
+            imgNext.src = frameURLs[nb.forward];
+            imgNext.style.transition = "none";
+            imgNext.style.opacity = String(Math.min(Math.abs(ratio) * 1.8, 0.9));
+            imgNext.style.transform = `scale(1.03) translateX(${20 + dx * 0.15}px)`;
+        } else if (dx > 0 && nb.back !== undefined) {
+            imgNext.src = frameURLs[nb.back];
+            imgNext.style.transition = "none";
+            imgNext.style.opacity = String(Math.min(Math.abs(ratio) * 1.8, 0.9));
+            imgNext.style.transform = `scale(1.03) translateX(${-20 + dx * 0.15}px)`;
+        }
     }
 });
 
 document.addEventListener("mouseup", () => {
     if (!isMouseDragging) return;
     isMouseDragging = false;
-    const threshold = window.innerWidth * 0.18;
-    const nb = getNeighbors(current);
-    if      (mouseDragX < -threshold && nb.forward !== undefined) goTo(nb.forward, "forward");
-    else if (mouseDragX >  threshold && nb.back    !== undefined) goTo(nb.back,    "back");
-    else {
-        imgCurrent.style.transition = "transform 0.3s cubic-bezier(0.34,1.56,0.64,1)";
-        imgCurrent.style.transform  = "scale(1) translateX(0px)";
-        imgNext.style.opacity       = "0";
+    document.getElementById("hotspots").style.pointerEvents = "";
+
+    if (stripMode) {
+        stripVel = calcDragVelocity();
+        if (Math.abs(stripVel) > 0.015) {
+            startMomentum();
+        } else {
+            const n       = frameURLs.length;
+            const nearest = Math.round(stripPos);
+            animateSnapTo(isCircular ? ((nearest % n) + n) % n : clamp(nearest, 0, n - 1));
+        }
+    } else {
+        const dx  = dragHistory.length ? dragHistory[dragHistory.length - 1].x - dragStartX : 0;
+        const nb  = getNeighbors(current);
+        const thr = window.innerWidth * 0.18;
+        if      (dx < -thr && nb.forward !== undefined) goTo(nb.forward, "forward");
+        else if (dx >  thr && nb.back    !== undefined) goTo(nb.back,    "back");
+        else {
+            imgCurrent.style.transition = "transform 0.3s cubic-bezier(0.34,1.56,0.64,1)";
+            imgCurrent.style.transform  = "scale(1) translateX(0px)";
+            imgNext.style.opacity       = "0";
+        }
+        isStripActive = false;
     }
 });
 
@@ -1162,7 +1398,8 @@ function updateDebug() {
     const qDups = sa ? String(sa.duplicateCount) : "—";
 
     el.textContent =
-        `frame: ${current} / ${frameURLs.length - 1}\n` +
+        `frame: ${current} / ${frameURLs.length - 1}  stripPos: ${stripPos.toFixed(2)}  vel: ${stripVel.toFixed(3)}\n` +
+        `strip: ${stripMode ? "on" : "off (<4 frames)"}  active: ${isStripActive}\n` +
         `graph: ${hasGraph ? "yes" : "fallback"}  circular: ${isCircular ? "yes" : "no"}\n` +
         `heading: ${heading != null ? Math.round(heading) + "°" : "—"}\n` +
         `mode: ${captureMode || "—"}  lens: ${lensFactor != null ? lensFactor + "x" : "—"}  target: ${targetFrameCount ?? "—"}\n` +

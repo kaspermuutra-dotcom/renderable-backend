@@ -589,23 +589,6 @@ def get_manifest(scan_id):
         manifest["thumbnailURL"] = f"/uploads/{scan_id}/frames/{thumbnail}"
     return jsonify(manifest)
 
-# ── Legacy session API ────────────────────────────────────────────────────────
-
-@app.route("/api/session/<scan_id>")
-def session_meta(scan_id):
-    scan_folder  = os.path.join(UPLOAD_FOLDER, scan_id)
-    session_json = os.path.join(scan_folder, "session.json")
-    if not os.path.exists(session_json):
-        frames = sorted([f for f in os.listdir(scan_folder) if f.endswith(".jpg")])
-        if not frames: return jsonify({"error": "session not found"}), 404
-        return jsonify({
-            "sessionID": scan_id, "frameCount": len(frames), "frames": frames,
-            "frameURLs": [f"/uploads/{scan_id}/frames/{f}" for f in frames]
-        })
-    with open(session_json) as f: meta = json.load(f)
-    meta["frameURLs"] = [f"/uploads/{scan_id}/frames/{fr}" for fr in meta.get("frames", [])]
-    return jsonify(meta)
-
 # ── Serve files ───────────────────────────────────────────────────────────────
 
 @app.route("/uploads/<scan_id>/frames/<filename>")
