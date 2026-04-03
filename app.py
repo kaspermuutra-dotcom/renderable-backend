@@ -621,8 +621,6 @@ def build_readme(scan_id, manifest):
         "-" * 40,
         "manifest.json       — scan metadata and navigation graph",
         "frames/             — ordered capture images",
-        "thumbnail.jpg       — cover image (if available)",
-        "session.json        — legacy session metadata",
         "analytics.jsonl     — engagement events (if available)",
         "leads_summary.json  — lead count summary (if available)",
         "README.txt          — this file",

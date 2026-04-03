@@ -1260,7 +1260,7 @@ document.getElementById("viewer").addEventListener("touchend", () => {
     if (!isDragging) return;
     isDragging = false;
     document.getElementById("hotspots").style.pointerEvents = "";
-
+ 
     if (stripMode) {
         stripVel = calcDragVelocity();
         if (Math.abs(stripVel) > 0.015) {
