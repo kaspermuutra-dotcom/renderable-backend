@@ -1,5 +1,5 @@
 from flask import Flask, request, jsonify, render_template, send_file
-import os, uuid, zipfile, json, shutil, logging, re, io, csv
+import os, uuid, zipfile, json, shutil, logging, re, io, csv, mimetypes
 from datetime import datetime, timezone, timedelta
 from collections import defaultdict
 
@@ -595,7 +595,8 @@ def get_manifest(scan_id):
 def serve_frame(scan_id, filename):
     path = os.path.join(UPLOAD_FOLDER, scan_id, filename)
     if not os.path.exists(path): return "Not found", 404
-    return send_file(path, mimetype="image/jpeg")
+    mime, _ = mimetypes.guess_type(filename)
+    return send_file(path, mimetype=mime or "image/jpeg")
 
 @app.route("/uploads/<scan_id>/scan.usdz")
 def serve_usdz(scan_id):

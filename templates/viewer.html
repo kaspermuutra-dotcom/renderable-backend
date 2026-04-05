@@ -238,6 +238,10 @@
         <h1>Renderable</h1>
     </div>
     <div style="display:flex;align-items:center;gap:8px">
+        <span id="legacy-badge" style="display:none;font-size:10px;font-weight:600;
+           color:rgba(255,200,80,0.7);background:rgba(255,200,80,0.08);
+           padding:3px 9px;border-radius:20px;border:1px solid rgba(255,200,80,0.18);
+           letter-spacing:0.4px" title="Rescan to enable full 360° rendering">Basic view</span>
         <span id="capture-badge" style="display:none;font-size:10px;font-weight:700;
            color:rgba(255,255,255,0.45);background:rgba(255,255,255,0.08);
            padding:3px 9px;border-radius:20px;border:1px solid rgba(255,255,255,0.12);
@@ -337,6 +341,7 @@ let captureMode      = null;   // "standard" | "wide" — optional, may be absen
 let lensFactor       = null;   // 1.0 | 0.5 — optional, may be absent
 let targetFrameCount = null;   // integer — optional, may be absent
 let isCircular       = false;  // true when first/last frame headings are within 30°
+let legacyScan       = false;  // true when frames lack heading data (synthesised headings used)
 let playStepCount    = 0;      // steps taken in current autoplay session (loop guard)
 let scanAnalysis     = null;   // result of computeScanAnalysis(), set after loadSession()
 let frameQuality     = [];    // per-frame quality score 0–1, aligned with frameObjects index
@@ -401,23 +406,8 @@ async function loadSession() {
         hasGraph = !hasDiscarded &&
             frameObjects.some(f => f.neighbors && Object.keys(f.neighbors).length > 0);
 
-        // Circular scan detection: requires a graph AND first/last frame headings
-        // within 30°. heading != null guards ensure heading: 0 (north) is not
-        // treated as absent. Conservative threshold avoids false positives on
-        // open-ended hallway or room scans.
-        isCircular = false;
-        if (hasGraph && frameObjects.length >= 2) {
-            const firstH = frameObjects[0]?.heading;
-            const lastH  = frameObjects[frameObjects.length - 1]?.heading;
-            if (firstH != null && lastH != null && angularDifference(firstH, lastH) < 30) {
-                isCircular = true;
-            }
-        }
-
-        // Scan analysis — must run after frameObjects is finalised and isCircular is set
-        // so that computeScanAnalysis() has access to the complete heading dataset.
-        scanAnalysis  = computeScanAnalysis();
-        frameQuality  = computeFrameQuality();
+        // isCircular, scanAnalysis and frameQuality are computed below,
+        // after frames are sorted by heading.
 
         // Remap room frame boundaries from original manifest indices to filtered
         // frameObjects indices. When frames are discarded the manifest's start_frame /
@@ -458,7 +448,63 @@ async function loadSession() {
         lensFactor       = manifest.lens_factor       ?? null;
         targetFrameCount = manifest.target_frame_count ?? null;
 
+        // ── Heading-sort for cylindrical rendering ──────────────────────────
+        // Non-graph scans: sort frames by heading so the strip is angularly
+        // correct.  Graph scans keep manifest order (graph indices are fragile).
+        // Legacy scans (no heading data): synthesise evenly-distributed headings.
+        const hasHeadingData = frameObjects.some(f => f.heading != null);
+        legacyScan = !hasHeadingData;
+
+        if (legacyScan) {
+            // Synthesise headings — even angular distribution across 360°
+            const n = frameObjects.length;
+            frameObjects = frameObjects.map((f, i) => ({
+                ...f, heading: (i / n) * 360
+            }));
+        } else if (!hasGraph) {
+            // Sort by heading, keep (frameObject, frameURL) pairs aligned
+            const pairs = frameObjects.map((f, i) => ({ f, url: frameURLs[i], oi: i }));
+            pairs.sort((a, b) => (a.f.heading ?? 0) - (b.f.heading ?? 0));
+            const origToSort = {};
+            pairs.forEach(({ oi }, si) => { origToSort[oi] = si; });
+            frameObjects = pairs.map(p => p.f);
+            frameURLs    = pairs.map(p => p.url);
+            // Remap room frame ranges to the new sorted indices
+            rooms = rooms.map(r => {
+                if (r.start_frame === -1) return r;
+                const mapped = [];
+                for (let oi = r.start_frame; oi <= r.end_frame; oi++) {
+                    if (origToSort[oi] !== undefined) mapped.push(origToSort[oi]);
+                }
+                if (!mapped.length) return { ...r, start_frame: -1, end_frame: -1 };
+                return { ...r, start_frame: Math.min(...mapped), end_frame: Math.max(...mapped) };
+            });
+        }
+
+        // Circular detection — works correctly for sorted frames:
+        // after sort, frameObjects[0] has min heading and last has max heading;
+        // a small arc between them means the scan wraps around 0°/360°.
+        isCircular = false;
+        if (frameObjects.length >= 2) {
+            const firstH = frameObjects[0]?.heading;
+            const lastH  = frameObjects[frameObjects.length - 1]?.heading;
+            if (firstH != null && lastH != null && angularDifference(firstH, lastH) < 30) {
+                isCircular = true;
+            }
+        }
+
+        // Scan analysis and per-frame quality — must run after sorting so that
+        // consecutive-frame metrics (avgDeltaYaw, duplicates) use angular order.
+        scanAnalysis = computeScanAnalysis();
+        frameQuality = computeFrameQuality();
+
         if (frameURLs.length === 0) throw new Error("No frames found");
+
+        // Show legacy badge when heading data is absent.
+        if (legacyScan) {
+            const lb = document.getElementById("legacy-badge");
+            if (lb) lb.style.display = "inline-block";
+        }
 
         // Show capture mode badge for known modes.
         // Wide: green accent tint to signal non-standard optics.
