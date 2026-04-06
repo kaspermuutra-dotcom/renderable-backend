@@ -481,15 +481,24 @@ async function loadSession() {
             });
         }
 
-        // Circular detection — works correctly for sorted frames:
-        // after sort, frameObjects[0] has min heading and last has max heading;
-        // a small arc between them means the scan wraps around 0°/360°.
+        // Circular detection: compute the largest angular gap between consecutive
+        // sorted headings plus the wrap-around gap. A scan is circular when the
+        // largest gap is < 60° — the same criterion used by computeScanAnalysis()
+        // for "full_room". This correctly handles scans with few frames (e.g. 8
+        // frames at 45° spacing where angularDifference(first, last) = 45° and
+        // a simpler < 30° threshold would falsely mark the scan as non-circular).
         isCircular = false;
-        if (frameObjects.length >= 2) {
-            const firstH = frameObjects[0]?.heading;
-            const lastH  = frameObjects[frameObjects.length - 1]?.heading;
-            if (firstH != null && lastH != null && angularDifference(firstH, lastH) < 30) {
-                isCircular = true;
+        if (frameObjects.length >= 3) {
+            const sortedH = frameObjects
+                .map(f => f.heading)
+                .filter(h => h != null)
+                .sort((a, b) => a - b);
+            if (sortedH.length >= 3) {
+                const nh = sortedH.length;
+                let largestGapH = sortedH[0] + 360 - sortedH[nh - 1]; // wrap-around
+                for (let i = 1; i < nh; i++)
+                    largestGapH = Math.max(largestGapH, sortedH[i] - sortedH[i - 1]);
+                isCircular = largestGapH < 60;
             }
         }
 
