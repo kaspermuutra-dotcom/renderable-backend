@@ -545,11 +545,11 @@ def upload():
     if len(listed) != declared:
         return jsonify({"error": f"frame_count mismatch: {declared} vs {len(listed)}"}), 400
 
+    def _fname(f):
+        return (f.get("filename") or "") if isinstance(f, dict) else (f or "")
     missing = [
-        (f.get("filename") if isinstance(f, dict) else f)
-        for f in listed
-        if not os.path.exists(os.path.join(scan_folder,
-            f.get("filename") if isinstance(f, dict) else f))
+        _fname(f) for f in listed
+        if not _fname(f) or not os.path.exists(os.path.join(scan_folder, _fname(f)))
     ]
     if missing: return jsonify({"error": f"missing frames: {missing}"}), 400
 
@@ -655,7 +655,9 @@ def export_package(scan_id):
 
         frames = manifest.get("frames", [])
         for frame in frames:
-            filename = frame.get("filename") if isinstance(frame, dict) else frame
+            filename = (frame.get("filename") or "") if isinstance(frame, dict) else (frame or "")
+            if not filename:
+                continue
             src = os.path.join(scan_folder, filename)
             if os.path.exists(src):
                 zf.write(src, f"frames/{filename}")
