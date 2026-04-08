@@ -5,1540 +5,496 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
     <title>Renderable Viewer</title>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { background: #000; color: #fff;
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        html, body {
+            width: 100%; height: 100%;
+            background: #000;
+            overflow: hidden;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-            height: 100dvh; overflow: hidden; }
-
-        #viewer { position: absolute; inset: 0; overflow: hidden; cursor: grab; }
-        #viewer:active { cursor: grabbing; }
-
-        .frame-layer { position: absolute; inset: 0; width: 100%; height: 100%;
-            object-fit: cover; will-change: transform, opacity;
-            user-select: none; -webkit-user-drag: none; pointer-events: none; }
-
-        #frame-current { z-index: 2; opacity: 1; transform: scale(1) translateX(0px); }
-        #frame-next    { z-index: 1; opacity: 0; transform: scale(1.04) translateX(0px); }
-
-        #hotspots { position: absolute; inset: 0; z-index: 15; pointer-events: none; }
-
-        .hotspot { position: absolute; pointer-events: all; display: flex;
-            flex-direction: column; align-items: center; gap: 6px; cursor: pointer;
-            transform: translate(-50%, -50%); transition: opacity 0.3s ease; }
-        .hotspot-ring { width: 52px; height: 52px; border-radius: 50%;
-            background: rgba(255,255,255,0.12); border: 2px solid rgba(255,255,255,0.6);
-            backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
-            display: flex; align-items: center; justify-content: center;
-            font-size: 20px; transition: background 0.15s, transform 0.15s;
-            animation: pulse 2.4s ease-in-out infinite; }
-        .hotspot:active .hotspot-ring { background: rgba(255,255,255,0.3);
-            transform: scale(0.9); animation: none; }
-        .hotspot-label { font-size: 11px; font-weight: 600; letter-spacing: 0.5px;
-            color: rgba(255,255,255,0.8); text-transform: uppercase;
-            text-shadow: 0 1px 4px rgba(0,0,0,0.8); }
-        @keyframes pulse {
-            0%, 100% { box-shadow: 0 0 0 0 rgba(255,255,255,0.25); }
-            50%       { box-shadow: 0 0 0 8px rgba(255,255,255,0); }
+            color: #fff;
+            -webkit-tap-highlight-color: transparent;
         }
 
-        #topbar { position: absolute; top: 0; left: 0; right: 0; z-index: 20;
-            display: flex; justify-content: space-between; align-items: center;
-            padding: 16px 20px;
-            background: linear-gradient(to bottom, rgba(0,0,0,0.65), transparent); }
-        #topbar h1 { font-size: 16px; font-weight: 700; letter-spacing: 1px;
-            text-transform: uppercase; }
-        #progress { font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.85);
-            background: rgba(255,255,255,0.12); padding: 4px 12px; border-radius: 20px;
-            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-            border: 1px solid rgba(255,255,255,0.15); }
+        /* ── Viewer canvas ──────────────────────────────────────────────── */
 
-        #room-label { display: none; position: absolute; top: 70px; left: 50%;
-            transform: translateX(-50%); z-index: 20;
-            background: rgba(0,0,0,0.55); backdrop-filter: blur(8px);
-            -webkit-backdrop-filter: blur(8px);
-            border: 1px solid rgba(255,255,255,0.15);
-            padding: 5px 14px; border-radius: 20px; font-size: 13px; font-weight: 500;
-            color: rgba(255,255,255,0.9); pointer-events: none;
-            transition: opacity 0.3s ease; white-space: nowrap; }
+        #viewer {
+            position: fixed; inset: 0;
+            cursor: grab;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: pan-y; /* let vertical scroll pass through until axis is locked */
+        }
+        #viewer.dragging { cursor: grabbing; }
 
-        #ann-panel { display: none; position: absolute; bottom: 155px;
-            left: 16px; right: 16px; z-index: 20;
-            background: rgba(15,15,15,0.88); backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            border: 1px solid rgba(255,255,255,0.12);
-            border-radius: 12px; padding: 12px 14px;
-            font-size: 13px; line-height: 1.5; }
-        #ann-title { font-weight: 600; margin-bottom: 2px; }
-        #ann-body  { color: rgba(255,255,255,0.6); font-size: 12px; }
-        #ann-type  { margin-top: 6px; font-size: 11px; color: rgba(255,255,255,0.35); }
+        /* Two img layers; only one is visible at a time */
+        .layer {
+            position: absolute; inset: 0;
+            width: 100%; height: 100%;
+            object-fit: cover;
+            pointer-events: none;
+            -webkit-user-drag: none;
+            display: block;
+        }
+        #layer-a { z-index: 1; opacity: 1; }
+        #layer-b { z-index: 2; opacity: 0; }
 
-        #dots { position: absolute; bottom: 100px; left: 50%;
-            transform: translateX(-50%); z-index: 20;
-            display: flex; gap: 5px; align-items: center; }
-        .dot { width: 5px; height: 5px; border-radius: 3px;
-            background: rgba(255,255,255,0.3);
-            transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1); cursor: pointer; }
-        .dot.active { width: 22px; background: #fff; }
+        /* ── Top bar ────────────────────────────────────────────────────── */
 
-        #controls { position: absolute; bottom: 0; left: 0; right: 0; z-index: 20;
-            display: flex; justify-content: center; align-items: center;
-            padding: 16px 0 44px;
-            background: linear-gradient(to top, rgba(0,0,0,0.65), transparent); }
-        #play-btn { background: rgba(255,255,255,0.18);
-            border: 1px solid rgba(255,255,255,0.2); color: #fff;
-            width: 58px; height: 58px; border-radius: 50%; font-size: 22px;
-            cursor: pointer; display: flex; align-items: center; justify-content: center;
-            backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-            transition: transform 0.15s, background 0.2s; }
-        #play-btn:active { transform: scale(0.88); background: rgba(255,255,255,0.3); }
+        #topbar {
+            position: fixed; top: 0; left: 0; right: 0;
+            z-index: 20;
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 16px;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.65) 0%, transparent 100%);
+            pointer-events: none;
+        }
 
-        #hint { position: absolute; bottom: 68px; left: 50%;
-            transform: translateX(-50%); z-index: 20; font-size: 12px;
-            color: rgba(255,255,255,0.4); letter-spacing: 0.5px;
-            pointer-events: none; transition: opacity 0.6s ease; white-space: nowrap; }
+        #scan-name {
+            font-size: 13px; font-weight: 700; letter-spacing: 0.5px;
+            text-transform: uppercase;
+            text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+            max-width: 55vw;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
 
-        #debug { display: none; position: absolute; top: 70px; left: 16px; z-index: 25;
-            font-size: 11px; font-family: monospace; color: rgba(255,255,255,0.5);
-            background: rgba(0,0,0,0.5); padding: 6px 10px; border-radius: 6px;
-            pointer-events: none; line-height: 1.6; }
-
-        #loading, #error-state { position: absolute; inset: 0; z-index: 30;
-            display: flex; flex-direction: column; align-items: center;
-            justify-content: center; gap: 18px; background: #000; }
-        #error-state { display: none; }
-        .spinner { width: 36px; height: 36px;
-            border: 2.5px solid rgba(255,255,255,0.15); border-top-color: #fff;
-            border-radius: 50%; animation: spin 0.75s linear infinite; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        .state-label { font-size: 14px; color: rgba(255,255,255,0.5); }
-        .error-icon  { color: rgba(255,255,255,0.35); }
-        #error-action { margin-top: 4px; font-size: 13px; color: rgba(255,255,255,0.3);
-            text-align: center; max-width: 280px; line-height: 1.5; }
-
-        /* ── Room strip ── */
-        #room-strip { position: absolute; bottom: 128px; left: 50%;
-            transform: translateX(-50%); z-index: 20;
-            display: flex; gap: 6px; align-items: center;
-            max-width: calc(100% - 40px); overflow-x: auto;
-            padding: 2px 0; scrollbar-width: none; }
-        #room-strip::-webkit-scrollbar { display: none; }
-        .room-chip { font-size: 11px; font-weight: 600; letter-spacing: 0.3px;
-            padding: 4px 12px; border-radius: 20px; cursor: pointer; white-space: nowrap;
-            background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.15);
+        #hud {
+            font-size: 11px; font-weight: 600;
             color: rgba(255,255,255,0.6);
-            transition: background 0.2s, color 0.2s, border-color 0.2s; }
-        .room-chip.active { background: rgba(62,207,142,0.08);
-            border-color: rgba(62,207,142,0.18); color: rgba(62,207,142,0.45); }
-
-        /* ── Large-scan progress bar ── */
-        #progress-bar { position: absolute; bottom: 108px; left: 50%;
-            transform: translateX(-50%); z-index: 20;
-            width: calc(100% - 48px); max-width: 280px;
-            height: 2px; border-radius: 2px;
-            background: rgba(255,255,255,0.1); display: none; }
-        #progress-bar-fill { height: 100%; width: 0%; border-radius: 2px;
-            background: rgba(255,255,255,0.4);
-            transition: width 0.35s cubic-bezier(0.4,0,0.2,1); }
-
-        /* ── Compass HUD ── */
-        #compass { position: absolute; top: 70px; right: 16px; z-index: 20;
-            font-size: 11px; font-family: monospace; font-weight: 600;
-            color: rgba(255,255,255,0.5); background: rgba(0,0,0,0.45);
-            backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-            border: 1px solid rgba(255,255,255,0.12);
+            background: rgba(0,0,0,0.45);
             padding: 4px 10px; border-radius: 20px;
-            pointer-events: none; display: none; letter-spacing: 0.3px; }
-
-        @keyframes loaderSlide {
-            0%   { transform: translateX(-120%); }
-            60%  { transform: translateX(240%); }
-            100% { transform: translateX(240%); }
+            border: 1px solid rgba(255,255,255,0.12);
+            letter-spacing: 0.3px;
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
         }
+
+        /* ── Drag hint ──────────────────────────────────────────────────── */
+
+        #drag-hint {
+            position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%);
+            z-index: 20;
+            font-size: 11px; color: rgba(255,255,255,0.35);
+            pointer-events: none;
+            transition: opacity 0.6s ease;
+            white-space: nowrap;
+        }
+        #drag-hint.gone { opacity: 0; }
+
+        /* ── Loading screen ─────────────────────────────────────────────── */
+
+        #loading {
+            position: fixed; inset: 0; z-index: 99;
+            background: #000;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center; gap: 16px;
+            transition: opacity 0.3s ease;
+        }
+        #loading.fade { opacity: 0; pointer-events: none; }
+
+        .spinner {
+            width: 36px; height: 36px;
+            border: 2.5px solid rgba(255,255,255,0.1);
+            border-top-color: #00C47A;
+            border-radius: 50%;
+            animation: spin 0.75s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .load-text { font-size: 12px; color: rgba(255,255,255,0.35); letter-spacing: 0.5px; }
+
+        /* ── Error screen ───────────────────────────────────────────────── */
+
+        #error {
+            display: none; /* toggled to flex */
+            position: fixed; inset: 0; z-index: 99;
+            background: #000;
+            flex-direction: column; align-items: center; justify-content: center;
+            gap: 10px; padding: 32px; text-align: center;
+        }
+        #error.show { display: flex; }
+
+        .err-icon { color: #e05252; margin-bottom: 4px; }
+        #err-msg { font-size: 15px; color: rgba(255,255,255,0.75); max-width: 300px; }
+        #err-sub { font-size: 12px; color: rgba(255,255,255,0.35); }
     </style>
 </head>
 <body>
 
-<div id="welcome-screen" style="
-    position: fixed;
-    inset: 0;
-    background: #000000;
-    z-index: 9999;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    transition: opacity 600ms cubic-bezier(0.4,0,0.2,1);
-    pointer-events: none;
-">
-    <div style="
-        font-size: 26px;
-        font-weight: 600;
-        letter-spacing: 0.16em;
-        font-family: -apple-system, BlinkMacSystemFont,
-                     'SF Pro Display', 'Helvetica Neue',
-                     sans-serif;
-        text-transform: uppercase;
-    ">
-        <span style="color:rgba(255,255,255,0.95)">Render</span><span style="color:#3ecf8e">able</span>
-    </div>
-    <div style="
-        font-size: 10px;
-        letter-spacing: 0.28em;
-        color: rgba(255,255,255,0.25);
-        font-family: -apple-system, BlinkMacSystemFont,
-                     'SF Pro Text', 'Helvetica Neue',
-                     sans-serif;
-        text-transform: uppercase;
-    ">Spatial Walkthrough</div>
-    <div style="
-        margin-top: 36px;
-        width: 28px;
-        height: 1px;
-        background: rgba(255,255,255,0.10);
-        border-radius: 1px;
-        overflow: hidden;
-    ">
-        <div style="
-            height: 100%;
-            width: 45%;
-            background: rgba(255,255,255,0.55);
-            border-radius: 1px;
-            animation: loaderSlide 1.4s ease-in-out infinite;
-        "></div>
-    </div>
-</div>
-
+<!-- Loading -->
 <div id="loading">
     <div class="spinner"></div>
-    <p class="state-label">Loading capture...</p>
-</div>
-<div id="error-state">
-    <div class="error-icon">
-        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
-            <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-        </svg>
-    </div>
-    <p class="state-label" id="error-msg">This tour could not be loaded.</p>
-    <p id="error-action">Check your connection and try refreshing the page.</p>
+    <div class="load-text">Loading capture…</div>
 </div>
 
+<!-- Error -->
+<div id="error">
+    <div class="err-icon">
+        <svg width="38" height="38" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="1.5"
+             stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/>
+            <line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+    </div>
+    <p id="err-msg">Could not load this tour.</p>
+    <p id="err-sub">Check your connection and refresh.</p>
+</div>
+
+<!-- Viewer -->
 <div id="viewer">
-    <img id="frame-next"    class="frame-layer" src="" alt="">
-    <img id="frame-current" class="frame-layer" src="" alt="Room frame">
-    <div id="hotspots"></div>
+    <img id="layer-a" class="layer" src="" alt="">
+    <img id="layer-b" class="layer" src="" alt="">
 </div>
 
 <div id="topbar">
-    <div style="display:flex;align-items:center;gap:12px">
-        <a href="/scans" style="color:rgba(255,255,255,0.6);font-size:13px;text-decoration:none;
-           background:rgba(255,255,255,0.1);padding:4px 10px;border-radius:20px;
-           border:1px solid rgba(255,255,255,0.15)">← Library</a>
-        <h1>Renderable</h1>
-    </div>
-    <div style="display:flex;align-items:center;gap:8px">
-        <span id="legacy-badge" style="display:none;font-size:10px;font-weight:600;
-           color:rgba(255,200,80,0.7);background:rgba(255,200,80,0.08);
-           padding:3px 9px;border-radius:20px;border:1px solid rgba(255,200,80,0.18);
-           letter-spacing:0.4px" title="Rescan to enable full 360° rendering">Basic view</span>
-        <span id="capture-badge" style="display:none;font-size:10px;font-weight:700;
-           color:rgba(255,255,255,0.45);background:rgba(255,255,255,0.08);
-           padding:3px 9px;border-radius:20px;border:1px solid rgba(255,255,255,0.12);
-           letter-spacing:0.6px;text-transform:uppercase"></span>
-        <span id="progress">— / —</span>
-    </div>
+    <div id="scan-name"></div>
+    <div id="hud">— / —</div>
 </div>
 
-<div id="room-label"></div>
-<div id="compass"></div>
-<div id="ann-panel">
-    <div id="ann-title"></div>
-    <div id="ann-body"></div>
-    <div id="ann-type"></div>
-</div>
-<div id="room-strip"></div>
-<div id="progress-bar"><div id="progress-bar-fill"></div></div>
-<div id="dots"></div>
-<div id="hint">Drag or tap hotspots to navigate</div>
-<div id="debug"></div>
-
-<div id="controls">
-    <button id="play-btn" onclick="togglePlay()">&#9654;</button>
-</div>
-
-<div id="minimap" style="
-    display: none;
-    position: absolute;
-    bottom: 88px;
-    right: 16px;
-    width: 120px;
-    height: 120px;
-    border-radius: 50%;
-    background: rgba(0,0,0,0.45);
-    border: 1px solid rgba(255,255,255,0.10);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    pointer-events: none;
-    z-index: 20;
-    overflow: hidden;
-"></div>
+<div id="drag-hint">Drag to rotate</div>
 
 <script>
-const SCAN_ID = "{{ scan_id }}";
+"use strict";
 
-// ── Analytics ─────────────────────────────────────────────────────────────────
+// ─── Config ──────────────────────────────────────────────────────────────────
 
-const SESSION_ID = Math.random().toString(36).slice(2, 10);
-let lastFrameTracked = -1;
+const SCAN_ID       = "{{ scan_id }}";
+const PX_PER_FRAME  = 5;      // pixels of horizontal drag to advance one frame
+const CROSSFADE_MS  = 80;     // crossfade duration in ms
+const AUTOPLAY_FPS  = 0.5;    // frames per second during intro spin
+const AUTOPLAY_MS   = 3000;   // total intro duration in ms
 
-function track(eventType, extra = {}) {
-    const payload = {
-        scan_id:     SCAN_ID,
-        session_id:  SESSION_ID,
-        event_type:  eventType,
-        source_page: "viewer",
-        ...extra
-    };
-    navigator.sendBeacon
-        ? navigator.sendBeacon("/analytics/event", new Blob([JSON.stringify(payload)], {type: "application/json"}))
-        : fetch("/analytics/event", {
+// ─── DOM ─────────────────────────────────────────────────────────────────────
+
+const $loading  = document.getElementById("loading");
+const $error    = document.getElementById("error");
+const $errMsg   = document.getElementById("err-msg");
+const $viewer   = document.getElementById("viewer");
+const $la       = document.getElementById("layer-a");
+const $lb       = document.getElementById("layer-b");
+const $name     = document.getElementById("scan-name");
+const $hud      = document.getElementById("hud");
+const $hint     = document.getElementById("drag-hint");
+
+// ─── State ───────────────────────────────────────────────────────────────────
+
+let frames   = [];   // [{filename, yaw}, ...] sorted by yaw ascending
+let urls     = [];   // parallel image URL array
+let current  = 0;
+let front    = "a";  // "a" | "b" — which layer is foreground
+let inFade   = false;
+
+// Drag
+let dragging    = false;
+let lastX       = 0;
+let accumPx     = 0;
+
+// Touch axis detection
+let txStart = 0;
+let tyStart = 0;
+let tAxis   = null; // null | "h" | "v"
+
+// ─── Analytics ───────────────────────────────────────────────────────────────
+
+const SID = Math.random().toString(36).slice(2, 10);
+
+function track(evt, extra) {
+    const payload = Object.assign({
+        scan_id:    SCAN_ID,
+        session_id: SID,
+        event_type: evt,
+        source:     "viewer",
+    }, extra || {});
+    const blob = new Blob([JSON.stringify(payload)], { type: "application/json" });
+    if (navigator.sendBeacon) {
+        navigator.sendBeacon("/analytics/event", blob);
+    } else {
+        fetch("/analytics/event", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),
-            keepalive: true
-          }).catch(() => {});
+            keepalive: true,
+        }).catch(() => {});
+    }
 }
 
-function trackFrame(index) {
-    if (index === lastFrameTracked) return;
-    lastFrameTracked = index;
-    const room = getRoomForFrame(index);
-    track("frame_view", {
-        frame_index: index,
-        room_name:   room ? room.name : null
-    });
-}
-
-// Send session_end on page unload
 window.addEventListener("pagehide", () => track("session_end"));
 document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "hidden") track("session_end");
 });
 
-// ── State ─────────────────────────────────────────────────────────────────────
+// ─── Layer helpers ───────────────────────────────────────────────────────────
 
-let frameObjects     = [];
-let frameURLs        = [];
-let current          = 0;
-let isPlaying        = false;
-let playTimer        = null;
-let isAnimating      = false;
-let hasGraph         = false;
-let rooms            = [];
-let annotations      = [];
-let captureMode      = null;   // "standard" | "wide" — optional, may be absent
-let lensFactor       = null;   // 1.0 | 0.5 — optional, may be absent
-let targetFrameCount = null;   // integer — optional, may be absent
-let isCircular       = false;  // true when first/last frame headings are within 30°
-let legacyScan       = false;  // true when frames lack heading data (synthesised headings used)
-let playStepCount    = 0;      // steps taken in current autoplay session (loop guard)
-let scanAnalysis     = null;   // result of computeScanAnalysis(), set after loadSession()
-let frameQuality     = [];    // per-frame quality score 0–1, aligned with frameObjects index
+function fEl() { return front === "a" ? $la : $lb; }
+function bEl() { return front === "a" ? $lb : $la; }
 
-// ── Strip / panoramic physics state ──────────────────────────────────────────
-let stripPos      = 0;     // continuous position in frame-space (fractional ok, e.g. 1.5 = halfway between 1 and 2)
-let stripVel      = 0;     // velocity in frame-units per 16 ms tick (positive = forward / left-drag)
-let stripRafId    = null;  // requestAnimationFrame id for physics / snap loop
-let stripMode     = false; // true when frameURLs.length >= STRIP_MIN_FRAMES
-let isStripActive = false; // true while drag or momentum is running (suppresses DOM-heavy updateUI paths)
-let dragStartPos  = 0;     // stripPos frozen at the start of each drag gesture
-let dragStartX    = 0;     // screen X frozen at drag start (touch and mouse)
-let dragHistory   = [];    // [{t, x}] recent samples — used for velocity estimation on release
+// ─── HUD ─────────────────────────────────────────────────────────────────────
 
-const STRIP_MIN_FRAMES = 4; // minimum frames before panoramic strip mode activates
-
-const imgCurrent = document.getElementById("frame-current");
-const imgNext    = document.getElementById("frame-next");
-
-const DOT_THRESHOLD          = 12;  // hide dot navigator above this frame count
-const MIN_HOTSPOT_SEPARATION = 30;  // degrees — minimum angular gap before collision nudge
-
-const HOTSPOT_POSITIONS = {
-    forward: { left: "50%", top: "38%" },
-    back:    { left: "50%", top: "68%" },
-    left:    { left: "18%", top: "50%" },
-    right:   { left: "82%", top: "50%" }
-};
-const HOTSPOT_ICONS = {
-    forward: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>`,
-    back:    `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>`,
-    left:    `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>`,
-    right:   `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>`
-};
-
-// ── Load ──────────────────────────────────────────────────────────────────────
-
-async function loadSession() {
-    try {
-        const res = await fetch(`/api/manifest/${SCAN_ID}`);
-        if (!res.ok) throw new Error(`Server error ${res.status}`);
-        const manifest = await res.json();
-        if (manifest.error) throw new Error(manifest.error);
-
-        // Phase 19: filter out discarded frames before building the viewer state.
-        // Frames without a `discarded` field are always kept (backward compatible).
-        // When any frame is discarded the navigation graph indices become stale,
-        // so we fall back to linear prev/next navigation for that manifest.
-        const rawFrames = manifest.frames || [];
-        const rawURLs   = manifest.frameURLs || rawFrames.map(f =>
-            `/uploads/${SCAN_ID}/frames/${f.filename || f}`
-        );
-        const hasDiscarded = rawFrames.some(f => f.discarded);
-        frameObjects = [];
-        frameURLs    = [];
-        rawFrames.forEach((frame, i) => {
-            if (!frame.discarded) {
-                frameObjects.push(frame);
-                frameURLs.push(rawURLs[i]);
-            }
-        });
-        hasGraph = !hasDiscarded &&
-            frameObjects.some(f => f.neighbors && Object.keys(f.neighbors).length > 0);
-
-        // isCircular, scanAnalysis and frameQuality are computed below,
-        // after frames are sorted by heading.
-
-        // Remap room frame boundaries from original manifest indices to filtered
-        // frameObjects indices. When frames are discarded the manifest's start_frame /
-        // end_frame values refer to the original unfiltered array and must be
-        // translated before use. When no frames are discarded the indices are
-        // already aligned and the manifest values are used as-is.
-        let remappedRooms = manifest.rooms || [];
-        if (hasDiscarded && remappedRooms.length > 0) {
-            // Build forward map: original index → filtered index.
-            const origToFiltered = {};
-            let fi = 0;
-            rawFrames.forEach((frame, oi) => {
-                if (!frame.discarded) { origToFiltered[oi] = fi++; }
-            });
-            remappedRooms = remappedRooms.map(room => {
-                const s = room.start_frame ?? 0;
-                const e = room.end_frame   ?? 0;
-                // First non-discarded frame at or after s.
-                let mappedStart = -1;
-                for (let oi = s; oi <= e && oi < rawFrames.length; oi++) {
-                    if (origToFiltered[oi] !== undefined) { mappedStart = origToFiltered[oi]; break; }
-                }
-                // Last non-discarded frame at or before e.
-                let mappedEnd = -1;
-                for (let oi = e; oi >= s; oi--) {
-                    if (origToFiltered[oi] !== undefined) { mappedEnd = origToFiltered[oi]; break; }
-                }
-                // If no valid frames survive in this range, mark room as empty.
-                if (mappedStart === -1 || mappedEnd === -1 || mappedStart > mappedEnd) {
-                    return { ...room, start_frame: -1, end_frame: -1 };
-                }
-                return { ...room, start_frame: mappedStart, end_frame: mappedEnd };
-            });
-        }
-        rooms = remappedRooms;
-        annotations      = manifest.annotations      || [];
-        captureMode      = manifest.capture_mode      ?? null;
-        lensFactor       = manifest.lens_factor       ?? null;
-        targetFrameCount = manifest.target_frame_count ?? null;
-
-        // ── Heading-sort for cylindrical rendering ──────────────────────────
-        // Non-graph scans: sort frames by heading so the strip is angularly
-        // correct.  Graph scans keep manifest order (graph indices are fragile).
-        // Legacy scans (no heading data): synthesise evenly-distributed headings.
-        const hasHeadingData = frameObjects.some(f => f.heading != null);
-        legacyScan = !hasHeadingData;
-
-        if (legacyScan) {
-            // Synthesise headings — even angular distribution across 360°
-            const n = frameObjects.length;
-            frameObjects = frameObjects.map((f, i) => ({
-                ...f, heading: (i / n) * 360
-            }));
-        } else if (!hasGraph) {
-            // Sort by heading, keep (frameObject, frameURL) pairs aligned
-            const pairs = frameObjects.map((f, i) => ({ f, url: frameURLs[i], oi: i }));
-            pairs.sort((a, b) => (a.f.heading ?? 0) - (b.f.heading ?? 0));
-            const origToSort = {};
-            pairs.forEach(({ oi }, si) => { origToSort[oi] = si; });
-            frameObjects = pairs.map(p => p.f);
-            frameURLs    = pairs.map(p => p.url);
-            // Remap room frame ranges to the new sorted indices
-            rooms = rooms.map(r => {
-                if (r.start_frame === -1) return r;
-                const mapped = [];
-                for (let oi = r.start_frame; oi <= r.end_frame; oi++) {
-                    if (origToSort[oi] !== undefined) mapped.push(origToSort[oi]);
-                }
-                if (!mapped.length) return { ...r, start_frame: -1, end_frame: -1 };
-                return { ...r, start_frame: Math.min(...mapped), end_frame: Math.max(...mapped) };
-            });
-        }
-
-        // Circular detection: compute the largest angular gap between consecutive
-        // sorted headings plus the wrap-around gap. A scan is circular when the
-        // largest gap is < 60° — the same criterion used by computeScanAnalysis()
-        // for "full_room". This correctly handles scans with few frames (e.g. 8
-        // frames at 45° spacing where angularDifference(first, last) = 45° and
-        // a simpler < 30° threshold would falsely mark the scan as non-circular).
-        isCircular = false;
-        if (frameObjects.length >= 3) {
-            const sortedH = frameObjects
-                .map(f => f.heading)
-                .filter(h => h != null)
-                .sort((a, b) => a - b);
-            if (sortedH.length >= 3) {
-                const nh = sortedH.length;
-                let largestGapH = sortedH[0] + 360 - sortedH[nh - 1]; // wrap-around
-                for (let i = 1; i < nh; i++)
-                    largestGapH = Math.max(largestGapH, sortedH[i] - sortedH[i - 1]);
-                isCircular = largestGapH < 60;
-            }
-        }
-
-        // Scan analysis and per-frame quality — must run after sorting so that
-        // consecutive-frame metrics (avgDeltaYaw, duplicates) use angular order.
-        scanAnalysis = computeScanAnalysis();
-        frameQuality = computeFrameQuality();
-
-        if (frameURLs.length === 0) throw new Error("No frames found");
-
-        // Show legacy badge when heading data is absent.
-        if (legacyScan) {
-            const lb = document.getElementById("legacy-badge");
-            if (lb) lb.style.display = "inline-block";
-        }
-
-        // Show capture mode badge for known modes.
-        // Wide: green accent tint to signal non-standard optics.
-        // Standard: neutral white — identical badge shape, no color override needed.
-        if (captureMode === "wide" || captureMode === "standard") {
-            const badge = document.getElementById("capture-badge");
-            if (badge) {
-                badge.textContent = captureMode === "wide" ? "Wide" : "Standard";
-                if (captureMode === "wide") {
-                    badge.style.color      = "rgba(62,207,142,0.45)";
-                    badge.style.background = "rgba(62,207,142,0.08)";
-                    badge.style.border     = "1px solid rgba(62,207,142,0.18)";
-                }
-                badge.style.display = "inline-block";
-            }
-        }
-
-        // Phase 1 — load frame 0, show viewer immediately
-        const firstImg = new Image();
-        firstImg.onload = firstImg.onerror = () => {
-            buildDots();
-            buildRoomStrip();
-            setFrame(0);
-            document.getElementById("loading").style.display = "none";
-            setTimeout(() => {
-                document.getElementById("hint").style.opacity = "0";
-            }, 4000);
-            // Phase 2 — background-preload remaining frames silently
-            preloadAll();
-            // Initialise strip mode now that frameURLs length is known
-            initStrip();
-            const ws = document.getElementById("welcome-screen");
-            if (ws) {
-                ws.style.opacity = "0";
-                setTimeout(() => ws.style.display = "none", 620);
-            }
-        };
-        firstImg.src = frameURLs[0];
-
-        // Fire analytics
-        track("session_start");
-        track("viewer_open");
-
-    } catch (e) {
-        const ws = document.getElementById("welcome-screen");
-        if (ws) {
-            ws.style.opacity = "0";
-            setTimeout(() => ws.style.display = "none", 400);
-        }
-        document.getElementById("loading").style.display = "none";
-        document.getElementById("error-state").style.display = "flex";
-        document.getElementById("error-msg").textContent = "This tour could not be loaded.";
-    }
+function updateHUD() {
+    const f = frames[current];
+    const yawStr = f ? `${Math.round(f.yaw)}°` : "—";
+    $hud.textContent = `${current + 1} / ${frames.length}  ·  ${yawStr}`;
 }
 
-// ── Preload ───────────────────────────────────────────────────────────────────
-
-// Background-preload all frames after the viewer is already visible.
-// Frame 0 is already in the browser cache from the phase-1 load, so
-// re-requesting it is a no-op. No callback needed — purely opportunistic.
-function preloadAll() {
-    frameURLs.forEach(url => {
-        const img = new Image();
-        img.src = url;
-    });
-}
-
-// ── Set frame ─────────────────────────────────────────────────────────────────
-
-function setFrame(index) {
-    current  = clamp(index, 0, frameURLs.length - 1);
-    stripPos = current; // keep strip state in sync with programmatic jumps
-    if (stripRafId) { cancelAnimationFrame(stripRafId); stripRafId = null; }
-    isStripActive = false;
-    imgCurrent.style.transition = "none";
-    imgCurrent.src = frameURLs[current];
-    imgCurrent.style.transform = "scale(1) translateX(0px)";
-    imgCurrent.style.opacity = "1";
-    imgNext.style.transition = "none";
-    imgNext.style.opacity = "0";
-    updateUI();
-    trackFrame(current);
-}
-
-// ── Animated transition ───────────────────────────────────────────────────────
-
-function goTo(index, dir = "forward") {
-    if (isAnimating) return;
-    // Cancel any running strip physics so CSS transitions below take over cleanly
-    if (stripRafId) { cancelAnimationFrame(stripRafId); stripRafId = null; }
-    isStripActive = false;
-    const target = clamp(index, 0, frameURLs.length - 1);
-    if (target === current) return;
-    isAnimating = true;
-
-    // Direction-aware transform presets
-    let outTransform, inStart;
-    if (dir === "forward") {
-        outTransform = "scale(0.96) translateX(0%)";
-        inStart      = "scale(1.08) translateX(0%)";
-    } else if (dir === "back") {
-        outTransform = "scale(1.04) translateX(0%)";
-        inStart      = "scale(0.93) translateX(0%)";
-    } else if (dir === "left") {
-        outTransform = "scale(1) translateX(7%)";
-        inStart      = "scale(1) translateX(-5%)";
-    } else if (dir === "right") {
-        outTransform = "scale(1) translateX(-7%)";
-        inStart      = "scale(1) translateX(5%)";
-    } else {
-        outTransform = "scale(0.96) translateX(0%)";
-        inStart      = "scale(1.08) translateX(0%)";
-    }
-
-    imgNext.src = frameURLs[target];
-    imgNext.style.transition = "none";
-    imgNext.style.transform  = inStart;
-    imgNext.style.opacity    = "0";
-
-    imgCurrent.style.transition = "transform 0.38s cubic-bezier(0.4,0,0.2,1), opacity 0.32s ease";
-    imgCurrent.style.transform  = outTransform;
-    imgCurrent.style.opacity    = "0";
-
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-        imgNext.style.transition = "transform 0.42s cubic-bezier(0.4,0,0.2,1), opacity 0.35s ease";
-        imgNext.style.transform  = "scale(1) translateX(0%)";
-        imgNext.style.opacity    = "1";
-    }));
-
-    setTimeout(() => {
-        imgCurrent.style.transition = "none";
-        imgCurrent.src = frameURLs[target];
-        imgCurrent.style.transform = "scale(1) translateX(0px)";
-        imgCurrent.style.opacity   = "1";
-        imgNext.style.transition   = "none";
-        imgNext.style.opacity      = "0";
-        current     = target;
-        stripPos    = target; // keep strip state aligned after animated transition
-        isAnimating = false;
-        updateUI();
-        trackFrame(current);
-    }, 420);
-}
-
-// ── Navigation ────────────────────────────────────────────────────────────────
-
-function getNeighbors(index) {
-    if (hasGraph && frameObjects[index] && frameObjects[index].neighbors)
-        return frameObjects[index].neighbors;
-    const nb = {};
-    if (index > 0)                    nb.back    = index - 1;
-    if (index < frameURLs.length - 1) nb.forward = index + 1;
-    return nb;
-}
-
-function next() { stopPlay(); const nb = getNeighbors(current); if (nb.forward !== undefined) goTo(nb.forward, "forward"); }
-function prev() { stopPlay(); const nb = getNeighbors(current); if (nb.back    !== undefined) goTo(nb.back,    "back"); }
-
-function moveInDirection(dir) {
-    stopPlay();
-    const nb = getNeighbors(current);
-    if (nb[dir] !== undefined) goTo(nb[dir], dir);
-}
-
-// ── Heading helpers ───────────────────────────────────────────────────────────
-
-// Returns the shortest arc between two absolute headings (result always 0–180°).
-// Both arguments must be numbers — guard with != null before calling.
-function angularDifference(a, b) {
-    const d = Math.abs(((b - a) % 360 + 360) % 360);
-    return d > 180 ? 360 - d : d;
-}
-
-// Returns neighbors of `index` sorted by relAngle ascending (0° = directly ahead,
-// increasing clockwise). Entries whose heading data is absent get relAngle = null
-// and sort to the end, preserving the existing fallback behaviour.
-function sortedNeighborsByAngle(index) {
-    const nb             = getNeighbors(index);
-    const currentHeading = frameObjects[index]?.heading;
-    return Object.entries(nb)
-        .map(([dir, targetIndex]) => {
-            const targetHeading = frameObjects[targetIndex]?.heading;
-            const relAngle = (currentHeading != null && targetHeading != null)
-                ? ((targetHeading - currentHeading) + 360) % 360
-                : null;
-            return { dir, targetIndex, relAngle };
-        })
-        .sort((a, b) => {
-            if (a.relAngle == null && b.relAngle == null) return 0;
-            if (a.relAngle == null) return  1;
-            if (b.relAngle == null) return -1;
-            return a.relAngle - b.relAngle;
-        });
-}
-
-// radius defaults to 30 (normal spread). Pass 38 when a collision nudge is needed.
-function angleToScreenPosition(angle, radius = 30) {
-    const rad = angle * Math.PI / 180;
-    let x = 50 + Math.sin(rad) * radius;
-    let y = 50 - Math.cos(rad) * radius;
-    x = Math.max(12, Math.min(88, x));
-    y = Math.max(15, Math.min(82, y));
-    return { left: x + "%", top: y + "%" };
-}
-
-function iconForAngle(angle) {
-    const a = ((angle % 360) + 360) % 360;
-    if (a < 45 || a >= 315) return HOTSPOT_ICONS.forward;
-    if (a < 135)            return HOTSPOT_ICONS.right;
-    if (a < 225)            return HOTSPOT_ICONS.back;
-    return HOTSPOT_ICONS.left;
-}
-
-// Returns the transition direction string for goTo() matching the visual angle.
-function dirForAngle(angle) {
-    const a = ((angle % 360) + 360) % 360;
-    if (a < 45 || a >= 315) return "forward";
-    if (a < 135)            return "right";
-    if (a < 225)            return "back";
-    return "left";
-}
-
-// Returns hotspot ring size scaled to visual prominence (larger = more forward).
-function ringSizeForAngle(angle) {
-    const a = ((angle % 360) + 360) % 360;
-    if (a < 45 || a >= 315)  return 60;  // forward-ish
-    if (a >= 135 && a < 225) return 44;  // back-ish
-    return 52;                            // side
-}
-
-// Returns ring opacity (back-ish hotspots are de-emphasised).
-function ringOpacityForAngle(angle) {
-    const a = ((angle % 360) + 360) % 360;
-    return (a >= 135 && a < 225) ? "0.7" : "1";
-}
-
-// Analyses heading distribution across all frames to characterise the scan.
-// Requires >= 3 frames with heading data; returns null otherwise.
-// All gap calculations use the circular-correct formula: the set of consecutive
-// gaps between sorted headings PLUS the wrap-around term (sorted[0] + 360 - sorted[n-1]).
-function computeScanAnalysis() {
-    const headedFrames = frameObjects.filter(f => f.heading != null);
-    const n = headedFrames.length;
-    if (n < 3) return null;
-
-    const sorted = headedFrames.map(f => f.heading).sort((a, b) => a - b);
-
-    // Circular-correct largest gap (includes wrap-around across 0°/360°)
-    let largestGap = sorted[0] + 360 - sorted[n - 1];
-    for (let i = 1; i < n; i++) {
-        largestGap = Math.max(largestGap, sorted[i] - sorted[i - 1]);
-    }
-
-    const headingCoverage  = 360 - largestGap;
-    const coverageFraction = headingCoverage / 360;
-
-    // Average yaw delta between consecutive frameObjects pairs (both must have heading).
-    // Uses angularDifference so the result is always the shortest arc, 0–180°.
-    let deltaSum = 0, deltaCount = 0;
-    for (let i = 1; i < frameObjects.length; i++) {
-        const h0 = frameObjects[i - 1]?.heading;
-        const h1 = frameObjects[i]?.heading;
-        if (h0 != null && h1 != null) {
-            deltaSum += angularDifference(h0, h1);
-            deltaCount++;
-        }
-    }
-    const avgDeltaYaw = deltaCount > 0 ? deltaSum / deltaCount : 0;
-
-    // Count consecutive frameObjects pairs where heading diff < 5° — matches the
-    // threshold used in computeFrameQuality() so both systems agree on duplicates.
-    let duplicateCount = 0;
-    for (let i = 1; i < frameObjects.length; i++) {
-        const h0 = frameObjects[i - 1]?.heading;
-        const h1 = frameObjects[i]?.heading;
-        if (h0 != null && h1 != null && angularDifference(h0, h1) < 5) duplicateCount++;
-    }
-
-    // Classify scan geometry.
-    let scanType = "unknown";
-    if      (largestGap < 60)          scanType = "full_room";
-    else if (coverageFraction < 0.30)  scanType = "corridor";
-    else if (headingCoverage >= 200)   scanType = "partial_room";
-
-    return { headingFrameCount: n, largestGap, headingCoverage,
-             coverageFraction, avgDeltaYaw, duplicateCount, scanType };
-}
-
-// Computes a quality score 0–1 for every frame in frameObjects.
-// Scores are derived from optional per-frame sensor metadata; fields that are
-// absent are silently skipped, so older manifests without quality data produce
-// a uniform array of 1.0 (all frames treated as full quality).
-//
-// Penalty model (cumulative, clamped to [0, 1]):
-//   rotation_rate > 1.5 rad/s  → −0.40  (motion blur from camera shake)
-//   acceleration  > 0.6 g      → −0.30  (capture instability)
-//   delta_yaw     < 5°         → −0.35  (duplicate / near-stationary viewpoint)
-//   blur                       → −0 to −0.30 soft (proportional to blur / 150)
-//
-// delta_yaw is read from frame.delta_yaw when present; otherwise computed live
-// from consecutive heading pairs so the penalty applies even on older manifests
-// that supply heading but not delta_yaw.
-function computeFrameQuality() {
-    return frameObjects.map((frame, i) => {
-        let penalty = 0;
-
-        // Camera shake — high rotation rate smears the image
-        if (frame.rotation_rate != null && frame.rotation_rate > 1.5) {
-            penalty += 0.40;
-        }
-
-        // Capture instability — high acceleration during shutter
-        if (frame.acceleration != null && frame.acceleration > 0.6) {
-            penalty += 0.30;
-        }
-
-        // Duplicate / near-stationary viewpoint
-        let deltaYaw = frame.delta_yaw ?? null;
-        if (deltaYaw == null && i > 0) {
-            const h0 = frameObjects[i - 1]?.heading;
-            const h1 = frame.heading;
-            if (h0 != null && h1 != null) deltaYaw = angularDifference(h0, h1);
-        }
-        if (deltaYaw != null && deltaYaw < 5) {
-            penalty += 0.35;
-        }
-
-        // Soft blur penalty: blur=0 → no penalty, blur=150 → full −0.30
-        if (frame.blur != null) {
-            penalty += Math.min(frame.blur / 150, 1) * 0.30;
-        }
-
-        // Soft exposure penalty: same scale assumption as blur (divisor 150).
-        // Weight 0.20 — lower than blur's 0.30 as exposure is less critical than motion.
-        if (frame.exposure_score != null) {
-            penalty += Math.min(frame.exposure_score / 150, 1) * 0.20;
-        }
-
-        return Math.max(0, Math.min(1, 1 - penalty));
-    });
-}
-
-// ── Hotspots ──────────────────────────────────────────────────────────────────
-
-function renderHotspots() {
-    const container  = document.getElementById("hotspots");
-    container.innerHTML = "";
-    const currentRoom = getRoomForFrame(current);
-
-    // Sorted by relAngle ascending so the most-forward hotspot is last in the DOM
-    // (highest stacking order, wins click priority) and adjacent-pair collision
-    // detection is a single linear scan.
-    const sorted = sortedNeighborsByAngle(current);
-
-    sorted.forEach(({ dir, targetIndex, relAngle }, i) => {
-        const useHeading = relAngle != null;
-
-        // Collision nudge: when this entry's angle is within MIN_HOTSPOT_SEPARATION
-        // of the previous heading-aware entry, push it further out radially so the
-        // two rings don't fully overlap. Only applies when both have heading data.
-        let radius = 30;
-        if (useHeading && i > 0) {
-            const prev = sorted[i - 1];
-            if (prev.relAngle != null && (relAngle - prev.relAngle) < MIN_HOTSPOT_SEPARATION) {
-                radius = 38;
-            }
-        }
-
-        let pos, icon;
-        if (useHeading) {
-            pos  = angleToScreenPosition(relAngle, radius);
-            icon = iconForAngle(relAngle);
-        } else {
-            pos  = HOTSPOT_POSITIONS[dir];
-            icon = HOTSPOT_ICONS[dir] || "";
-            if (!pos) return;
-        }
-
-        // Quality weighting: suppress or dim hotspots pointing to low-quality frames.
-        // frameQuality is empty for manifests without sensor data, so we default to
-        // full quality (1.0) to keep behaviour identical for older scans.
-        const quality = frameQuality.length > 0 ? (frameQuality[targetIndex] ?? 1) : 1;
-        if (quality < 0.20) return;  // suppress entirely — frame is very low quality
-
-        // Transition direction: use visual angle when heading mode is active so
-        // the slide animation matches the spatial cue the user sees on screen.
-        const transDir = useHeading ? dirForAngle(relAngle) : dir;
-
-        // Ring size and opacity: derive from visual angle in heading mode so
-        // forward-looking hotspots are large/prominent and back-looking ones
-        // are small/dim regardless of what the graph key says.
-        // Quality < 0.35 additionally reduces size and opacity as a visual signal.
-        const qualityDim  = quality < 0.35;
-        const ringSize    = (useHeading
-            ? ringSizeForAngle(relAngle)
-            : (dir === "forward" ? 60 : (dir === "back" ? 44 : 52)))
-            * (qualityDim ? 0.78 : 1);
-        const baseOpacity = useHeading
-            ? ringOpacityForAngle(relAngle)
-            : (dir === "back" ? "0.7" : "1");
-        const ringOpacity = qualityDim
-            ? String(Math.round(parseFloat(baseOpacity) * 0.50 * 100) / 100)
-            : baseOpacity;
-
-        const targetRoom   = getRoomForFrame(targetIndex);
-        const enteringRoom = targetRoom && (!currentRoom || targetRoom.name !== currentRoom.name);
-
-        const hotspot = document.createElement("div");
-        hotspot.className = "hotspot";
-        hotspot.style.left = pos.left;
-        hotspot.style.top  = pos.top;
-
-        const ring = document.createElement("div");
-        ring.className = "hotspot-ring";
-        ring.style.cssText = `width:${ringSize}px;height:${ringSize}px;opacity:${ringOpacity}`;
-        ring.innerHTML = icon;
-        hotspot.appendChild(ring);
-
-        if (enteringRoom) {
-            const lbl = document.createElement("span");
-            lbl.className = "hotspot-label";
-            lbl.textContent = targetRoom.name;
-            hotspot.appendChild(lbl);
-        }
-
-        // Navigate to the graph-resolved target; animate in the visually correct direction.
-        hotspot.addEventListener("click",    ()  => { stopPlay(); goTo(targetIndex, transDir); });
-        hotspot.addEventListener("touchend", e   => { e.stopPropagation(); stopPlay(); goTo(targetIndex, transDir); });
-        container.appendChild(hotspot);
-    });
-}
-
-// ── Minimap ───────────────────────────────────────────────────────────────────
-
-// Read-only spatial overview rendered as a circular ring of frame dots.
-// Each dot's angular position corresponds to the frame's compass heading (or
-// angle_from_start when heading is absent). The current frame is always the
-// topmost dot (appended last) and highlighted in accent green.
-// This function is a pure consumer — it writes only to #minimap's innerHTML
-// and touches no other state.
-function renderMinimap() {
-    const el = document.getElementById("minimap");
-    if (!el) return;
-
-    const hasData = frameObjects.some(f =>
-        f.polar_x != null || f.heading != null
-    );
-    if (!hasData) { el.style.display = "none"; return; }
-
-    // Sessions captured before Stage 5 will have neither heading
-    // nor angle_from_start. hasData will be false and the minimap
-    // will stay hidden. No error will occur. Full backward compatibility.
-
-    el.style.display = "block";
-    el.innerHTML = "";
-
-    const cx = 60, cy = 60, r = 44;
-    let currentDot = null;
-
-    try {
-        frameObjects.forEach((f, i) => {
-            // Prefer compass heading; fall back to angle_from_start; skip if neither.
-            let angle = null;
-            if      (f.heading          != null) angle = f.heading;
-            else if (f.angle_from_start != null) angle = f.angle_from_start;
-            if (angle == null) return;
-
-            // Polar-to-Cartesian: 0° → top of circle (north), increases clockwise.
-            const rad = (angle - 90) * Math.PI / 180;
-            const x   = cx + r * Math.cos(rad);
-            const y   = cy + r * Math.sin(rad);
-
-            // Current frame is deferred so it is appended last (guaranteed on top).
-            if (i === current) { currentDot = { x, y }; return; }
-
-            const q = frameQuality.length > 0 ? (frameQuality[i] ?? 1) : 1;
-            if (q < 0.20) return;  // suppress very-low-quality frames entirely
-
-            const size  = q < 0.35 ? 3 : 4;
-            const color = q < 0.35 ? "rgba(255,255,255,0.25)" : "rgba(255,255,255,0.55)";
-
-            const dot = document.createElement("div");
-            dot.style.cssText =
-                `position:absolute;width:${size}px;height:${size}px;` +
-                `border-radius:50%;background:${color};` +
-                `left:${x}px;top:${y}px;z-index:1;` +
-                `transform:translate(-50%,-50%)`;
-            el.appendChild(dot);
-        });
-    } catch (e) { /* defensive — never propagate errors to the caller */ }
-
-    // Center crosshair — appended before the current-frame dot so the dot
-    // always renders on top of it.
-    const cross = document.createElement("div");
-    cross.style.cssText =
-        `position:absolute;width:6px;height:6px;border-radius:50%;` +
-        `background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.20);` +
-        `left:${cx}px;top:${cy}px;transform:translate(-50%,-50%);z-index:2`;
-    el.appendChild(cross);
-
-    // Current frame dot — appended last so it is always the topmost element.
-    if (currentDot) {
-        const dot = document.createElement("div");
-        dot.style.cssText =
-            `position:absolute;width:7px;height:7px;border-radius:50%;` +
-            `background:rgba(62,207,142,1.0);` +
-            `box-shadow:0 0 0 2px rgba(62,207,142,0.20);` +
-            `left:${currentDot.x}px;top:${currentDot.y}px;z-index:3;` +
-            `transform:translate(-50%,-50%)`;
-        el.appendChild(dot);
-    }
-}
-
-// ── Compass ───────────────────────────────────────────────────────────────────
-
-function updateCompass(index) {
-    const el    = document.getElementById("compass");
-    const frame = frameObjects[index];
-    if (!frame || frame.heading == null) { el.style.display = "none"; return; }
-    const h        = Math.round(frame.heading);
-    const cardinals = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
-    const cardinal  = cardinals[Math.round(h / 45) % 8];
-    el.textContent  = `${cardinal} ${h}°`;
-    el.style.display = "block";
-}
-
-// ── Room label ────────────────────────────────────────────────────────────────
-
-function getRoomForFrame(index) {
-    // start_frame === -1 marks a room whose entire original frame range was discarded.
-    return rooms.find(r => r.start_frame !== -1 &&
-        index >= (r.start_frame ?? 0) && index <= (r.end_frame ?? 0)) || null;
-}
-
-function updateRoomLabel(index) {
-    const room = getRoomForFrame(index);
-    const el   = document.getElementById("room-label");
-    if (room) { el.textContent = room.name; el.style.display = "block"; }
-    else      { el.style.display = "none"; }
-}
-
-// ── Annotation panel ──────────────────────────────────────────────────────────
-
-function updateAnnotationPanel(index) {
-    const anns  = annotations.filter(a => a.frame_index === index);
-    const panel = document.getElementById("ann-panel");
-    if (anns.length === 0) { panel.style.display = "none"; return; }
-    const typeLabels = { info:"Info", feature:"Feature", upgrade:"Upgrade", caution:"Caution" };
-    panel.innerHTML = anns.map((ann, i) => {
-        const sep = i > 0
-            ? `<hr style="border:none;border-top:1px solid rgba(255,255,255,0.08);margin:10px 0">`
-            : "";
-        return sep +
-            `<div style="font-weight:600;margin-bottom:2px">${ann.title || ""}</div>` +
-            `<div style="color:rgba(255,255,255,0.6);font-size:12px">${ann.body  || ""}</div>` +
-            `<div style="margin-top:6px;font-size:11px;color:rgba(255,255,255,0.35)">${typeLabels[ann.type] || ""}</div>`;
-    }).join("");
-    panel.style.display = "block";
-}
-
-// ── Autoplay ──────────────────────────────────────────────────────────────────
-
-function togglePlay() { isPlaying ? stopPlay() : startPlay(); }
-
-function startPlay() {
-    if (current === frameURLs.length - 1) setFrame(0);
-    isPlaying     = true;
-    playStepCount = 0;
-    document.getElementById("play-btn").innerHTML = "&#9646;&#9646;";
-    // Corridor scans have tight, evenly-spaced frames so a faster interval feels
-    // natural. All other scan types (full_room, partial_room, unknown) use the
-    // default 2200 ms to give the viewer time to read each wider-angle frame.
-    const playInterval = scanAnalysis?.scanType === "corridor" ? 1800 : 2200;
-    playTimer = setInterval(() => {
-        playStepCount++;
-        // Hard cap at frameURLs.length steps to prevent infinite loops on
-        // circular scans. One full loop is always allowed.
-        if (playStepCount > frameURLs.length) { stopPlay(); return; }
-        const nb = getNeighbors(current);
-        if (nb.forward !== undefined) {
-            goTo(nb.forward, "forward");
-        } else if (isCircular) {
-            // Circular scan: wrap back to frame 0 instead of stopping.
-            goTo(0, "forward");
-        } else {
-            stopPlay();
-        }
-    }, playInterval);
-}
-
-function stopPlay() {
-    clearInterval(playTimer);
-    isPlaying = false;
-    document.getElementById("play-btn").innerHTML = "&#9654;";
-}
-
-// ── Strip physics ─────────────────────────────────────────────────────────────
-
-function initStrip() {
-    stripMode = frameURLs.length >= STRIP_MIN_FRAMES;
-    stripPos  = 0;
-    stripVel  = 0;
-}
-
-// Renders the panoramic strip at continuous position `pos` (frame-space float).
-// imgCurrent slides left as imgNext enters from the right — creates the feel of
-// a physical film strip being dragged across the viewport.
-function scrubTo(pos) {
-    const n = frameURLs.length;
-    let p = pos;
-    if (isCircular) {
-        p = ((p % n) + n) % n;
-    } else {
-        p = Math.max(0, Math.min(n - 1, p));
-    }
-    stripPos = p;
-
-    const iA   = Math.floor(p) % n;
-    // For non-circular at last frame, next frame is clamped to same index so
-    // imgNext stays hidden (frac will be 0 at the clamped boundary).
-    const iB   = isCircular ? (iA + 1) % n : Math.min(iA + 1, n - 1);
-    const frac = p - Math.floor(p);
-    const vw   = window.innerWidth;
-
-    imgCurrent.src = frameURLs[iA];
-    imgCurrent.style.transition = "none";
-    imgCurrent.style.transform  = `translateX(${-frac * vw}px) scale(1)`;
-    imgCurrent.style.opacity    = "1";
-
-    if (frac > 0.005 && iA !== iB) {
-        imgNext.src = frameURLs[iB];
-        imgNext.style.transition = "none";
-        imgNext.style.transform  = `translateX(${(1 - frac) * vw}px) scale(1)`;
-        imgNext.style.opacity    = "1";
-    } else {
-        imgNext.style.transition = "none";
-        imgNext.style.opacity    = "0";
-    }
-
-    // Update frame counter and lightweight UI when the display frame changes.
-    // Heavy rebuilds (hotspots, minimap) are suppressed during active scrub.
-    const displayFrame = Math.round(p) % n;
-    if (displayFrame !== current) {
-        current = displayFrame;
-        document.getElementById("progress").textContent = `${current + 1} / ${n}`;
-        updateDots();
-        updateRoomStrip(current);
-        updateCompass(current);
-        updateRoomLabel(current);
-        updateAnnotationPanel(current);
-        trackFrame(current);
-    }
-}
-
-// Restore imgCurrent to identity transform (used on drag abort).
-function resetStrip() {
-    imgCurrent.style.transition = "transform 0.3s cubic-bezier(0.34,1.56,0.64,1), opacity 0.3s ease";
-    imgCurrent.style.transform  = "scale(1) translateX(0px)";
-    imgNext.style.transition    = "opacity 0.25s ease";
-    imgNext.style.opacity       = "0";
-}
-
-// Derive drag velocity from recent history samples.
-// Returns frame-units per 16 ms tick (positive = forward = dragging left).
-function calcDragVelocity() {
-    if (dragHistory.length < 2) return 0;
-    const last = dragHistory[dragHistory.length - 1];
-    const prev = dragHistory[Math.max(0, dragHistory.length - 4)];
-    const dt   = last.t - prev.t;
-    const dx   = last.x - prev.x;
-    if (dt <= 0 || dt > 300) return 0;
-    // px/ms → frame-units/16ms tick  (drag left = negative dx = positive direction)
-    return -(dx / window.innerWidth) / (dt / 16);
-}
-
-// Physics momentum loop: applies stripVel with exponential decay until it drops
-// below threshold, then hands off to animateSnapTo().
-function startMomentum() {
-    if (stripRafId) cancelAnimationFrame(stripRafId);
-    isStripActive = true;
-    let lastTime  = null;
-    const DECAY   = 0.88; // per 16 ms tick (~60 fps)
-
-    function step(now) {
-        if (lastTime === null) { lastTime = now; stripRafId = requestAnimationFrame(step); return; }
-        const dt    = Math.min(now - lastTime, 50); // cap to prevent large jumps after tab switch
-        lastTime    = now;
-        const ticks = dt / 16;
-
-        stripPos += stripVel * ticks;
-        stripVel *= Math.pow(DECAY, ticks);
-
-        const n = frameURLs.length;
-        if (!isCircular) {
-            if (stripPos <= 0)     { stripPos = 0;     stripVel = 0; }
-            if (stripPos >= n - 1) { stripPos = n - 1; stripVel = 0; }
-        }
-
-        scrubTo(stripPos);
-
-        if (Math.abs(stripVel) < 0.008) {
-            const nearest = Math.round(stripPos);
-            const snapped = isCircular ? ((nearest % n) + n) % n : clamp(nearest, 0, n - 1);
-            animateSnapTo(snapped);
-            return;
-        }
-        stripRafId = requestAnimationFrame(step);
-    }
-    stripRafId = requestAnimationFrame(step);
-}
-
-// Spring-eased snap to exact integer frame index. Replaces any running rAF loop.
-// Calls setFrame() at the end to restore full UI (hotspots, minimap, etc.).
-function animateSnapTo(targetIndex) {
-    if (stripRafId) cancelAnimationFrame(stripRafId);
-    const n = frameURLs.length;
-
-    function snapStep() {
-        let diff = targetIndex - stripPos;
-        // Take shortest arc on circular strip
-        if (isCircular) {
-            if (diff >  n / 2) diff -= n;
-            if (diff < -n / 2) diff += n;
-        }
-        if (Math.abs(diff) < 0.003) {
-            stripPos = targetIndex;
-            setFrame(targetIndex % n); // setFrame resets isStripActive and renders full UI
-            return;
-        }
-        stripPos += diff * 0.22; // spring coefficient — higher = snappier
-        scrubTo(stripPos);
-        stripRafId = requestAnimationFrame(snapStep);
-    }
-    snapStep();
-}
-
-// ── Touch drag (strip-aware) ──────────────────────────────────────────────────
-
-let touchStartY = 0, isDragging = false;
-
-document.getElementById("viewer").addEventListener("touchstart", e => {
-    const touch  = e.touches[0];
-    dragStartX   = touch.clientX;
-    touchStartY  = touch.clientY;
-    dragStartPos = isCircular ? stripPos : clamp(Math.round(stripPos), 0, frameURLs.length - 1);
-    stripPos     = dragStartPos;
-    isDragging   = true;
-    dragHistory  = [{ t: Date.now(), x: touch.clientX }];
-    if (stripRafId) { cancelAnimationFrame(stripRafId); stripRafId = null; }
-    isStripActive = true;
-    stopPlay();
-    imgCurrent.style.transition = "none";
-    imgNext.style.transition    = "none";
-    // Suppress hotspot clicks while dragging
-    document.getElementById("hotspots").style.pointerEvents = "none";
-}, { passive: true });
-
-document.getElementById("viewer").addEventListener("touchmove", e => {
-    if (!isDragging) return;
-    const touch = e.touches[0];
-    const dx    = touch.clientX - dragStartX;
-    const dy    = touch.clientY - touchStartY;
-
-    // Abort if gesture is primarily vertical (allow native scroll on overlays)
-    if (dragHistory.length < 4 && Math.abs(dy) > Math.abs(dx) + 8) {
-        isDragging = false;
-        isStripActive = false;
-        document.getElementById("hotspots").style.pointerEvents = "";
-        resetStrip();
+// ─── Show frame ──────────────────────────────────────────────────────────────
+
+function showFrame(idx, instant) {
+    const n = frames.length;
+    if (!n) return;
+    idx = ((idx % n) + n) % n;
+
+    // During rapid drag, skip crossfade and update front layer directly.
+    if (inFade && !instant) {
+        current = idx;
+        fEl().src = urls[idx];
+        updateHUD();
         return;
     }
 
-    dragHistory.push({ t: Date.now(), x: touch.clientX });
-    if (dragHistory.length > 8) dragHistory.shift();
+    current = idx;
+    const url  = urls[idx];
+    const fore = fEl();
+    const back = bEl();
 
-    if (stripMode) {
-        scrubTo(dragStartPos - dx / window.innerWidth);
-    } else {
-        // Fallback parallax preview for short scans (< STRIP_MIN_FRAMES)
-        const nb    = getNeighbors(current);
-        const ratio = dx / window.innerWidth;
-        const scale = 1 - Math.abs(ratio) * 0.04;
-        imgCurrent.style.transform = `scale(${scale}) translateX(${dx * 0.45}px)`;
-        if (dx < 0 && nb.forward !== undefined) {
-            imgNext.src = frameURLs[nb.forward];
-            imgNext.style.transition = "none";
-            imgNext.style.opacity = String(Math.min(Math.abs(ratio) * 1.8, 0.9));
-            imgNext.style.transform = `scale(1.03) translateX(${20 + dx * 0.15}px)`;
-        } else if (dx > 0 && nb.back !== undefined) {
-            imgNext.src = frameURLs[nb.back];
-            imgNext.style.transition = "none";
-            imgNext.style.opacity = String(Math.min(Math.abs(ratio) * 1.8, 0.9));
-            imgNext.style.transform = `scale(1.03) translateX(${-20 + dx * 0.15}px)`;
-        }
+    updateHUD();
+
+    if (instant) {
+        fore.src              = url;
+        fore.style.transition = "none";
+        fore.style.opacity    = "1";
+        back.style.transition = "none";
+        back.style.opacity    = "0";
+        back.src              = "";
+        return;
     }
-}, { passive: true });
 
-document.getElementById("viewer").addEventListener("touchend", () => {
-    if (!isDragging) return;
-    isDragging = false;
-    document.getElementById("hotspots").style.pointerEvents = "";
- 
-    if (stripMode) {
-        stripVel = calcDragVelocity();
-        if (Math.abs(stripVel) > 0.015) {
-            startMomentum();
-        } else {
-            const n       = frameURLs.length;
-            const nearest = Math.round(stripPos);
-            animateSnapTo(isCircular ? ((nearest % n) + n) % n : clamp(nearest, 0, n - 1));
-        }
-    } else {
-        // Fallback: threshold-based snap for short scans
-        const dx  = dragHistory.length ? dragHistory[dragHistory.length - 1].x - dragStartX : 0;
-        const nb  = getNeighbors(current);
-        const thr = window.innerWidth * 0.22;
-        if      (dx < -thr && nb.forward !== undefined) goTo(nb.forward, "forward");
-        else if (dx >  thr && nb.back    !== undefined) goTo(nb.back,    "back");
-        else resetStrip();
-        isStripActive = false;
+    inFade = true;
+
+    // Stage back layer off-screen, load new URL.
+    back.style.transition = "none";
+    back.style.opacity    = "0";
+    back.src              = url;
+
+    function doFade() {
+        back.style.transition = `opacity ${CROSSFADE_MS}ms linear`;
+        back.style.opacity    = "1";
+        setTimeout(() => {
+            fore.style.transition = "none";
+            fore.style.opacity    = "0";
+            front  = front === "a" ? "b" : "a";
+            inFade = false;
+        }, CROSSFADE_MS + 10);
     }
-}, { passive: true });
 
-// ── Mouse drag (strip-aware) ──────────────────────────────────────────────────
+    if (back.complete && back.naturalWidth) {
+        doFade();
+    } else {
+        back.onload = back.onerror = function () {
+            back.onload = back.onerror = null;
+            doFade();
+        };
+    }
+}
 
-let isMouseDragging = false;
+function stepBy(delta) {
+    const n = frames.length;
+    if (!n) return;
+    showFrame(((current + delta) % n + n) % n);
+}
 
-document.getElementById("viewer").addEventListener("mousedown", e => {
-    dragStartX   = e.clientX;
-    dragStartPos = isCircular ? stripPos : clamp(Math.round(stripPos), 0, frameURLs.length - 1);
-    stripPos     = dragStartPos;
-    isMouseDragging = true;
-    dragHistory  = [{ t: Date.now(), x: e.clientX }];
-    if (stripRafId) { cancelAnimationFrame(stripRafId); stripRafId = null; }
-    isStripActive = true;
-    stopPlay();
-    imgCurrent.style.transition = "none";
-    imgNext.style.transition    = "none";
-    document.getElementById("hotspots").style.pointerEvents = "none";
+// ─── Drag accumulator ────────────────────────────────────────────────────────
+
+function flushAccum() {
+    while (accumPx <= -PX_PER_FRAME) {
+        accumPx += PX_PER_FRAME;
+        stepBy(1);   // drag left → advance (higher yaw)
+    }
+    while (accumPx >= PX_PER_FRAME) {
+        accumPx -= PX_PER_FRAME;
+        stepBy(-1);  // drag right → retreat (lower yaw)
+    }
+}
+
+// ─── Mouse events ────────────────────────────────────────────────────────────
+
+$viewer.addEventListener("mousedown", e => {
+    dragging = true;
+    lastX    = e.clientX;
+    accumPx  = 0;
+    $viewer.classList.add("dragging");
+    e.preventDefault();
 });
 
 document.addEventListener("mousemove", e => {
-    if (!isMouseDragging) return;
-    const dx = e.clientX - dragStartX;
-    dragHistory.push({ t: Date.now(), x: e.clientX });
-    if (dragHistory.length > 8) dragHistory.shift();
-
-    if (stripMode) {
-        scrubTo(dragStartPos - dx / window.innerWidth);
-    } else {
-        const nb    = getNeighbors(current);
-        const ratio = dx / window.innerWidth;
-        const scale = 1 - Math.abs(ratio) * 0.03;
-        imgCurrent.style.transform = `scale(${scale}) translateX(${dx * 0.4}px)`;
-        if (dx < 0 && nb.forward !== undefined) {
-            imgNext.src = frameURLs[nb.forward];
-            imgNext.style.transition = "none";
-            imgNext.style.opacity = String(Math.min(Math.abs(ratio) * 1.8, 0.9));
-            imgNext.style.transform = `scale(1.03) translateX(${20 + dx * 0.15}px)`;
-        } else if (dx > 0 && nb.back !== undefined) {
-            imgNext.src = frameURLs[nb.back];
-            imgNext.style.transition = "none";
-            imgNext.style.opacity = String(Math.min(Math.abs(ratio) * 1.8, 0.9));
-            imgNext.style.transform = `scale(1.03) translateX(${-20 + dx * 0.15}px)`;
-        }
-    }
+    if (!dragging) return;
+    accumPx += e.clientX - lastX;
+    lastX    = e.clientX;
+    flushAccum();
 });
 
 document.addEventListener("mouseup", () => {
-    if (!isMouseDragging) return;
-    isMouseDragging = false;
-    document.getElementById("hotspots").style.pointerEvents = "";
-
-    if (stripMode) {
-        stripVel = calcDragVelocity();
-        if (Math.abs(stripVel) > 0.015) {
-            startMomentum();
-        } else {
-            const n       = frameURLs.length;
-            const nearest = Math.round(stripPos);
-            animateSnapTo(isCircular ? ((nearest % n) + n) % n : clamp(nearest, 0, n - 1));
-        }
-    } else {
-        const dx  = dragHistory.length ? dragHistory[dragHistory.length - 1].x - dragStartX : 0;
-        const nb  = getNeighbors(current);
-        const thr = window.innerWidth * 0.18;
-        if      (dx < -thr && nb.forward !== undefined) goTo(nb.forward, "forward");
-        else if (dx >  thr && nb.back    !== undefined) goTo(nb.back,    "back");
-        else {
-            imgCurrent.style.transition = "transform 0.3s cubic-bezier(0.34,1.56,0.64,1)";
-            imgCurrent.style.transform  = "scale(1) translateX(0px)";
-            imgNext.style.opacity       = "0";
-        }
-        isStripActive = false;
-    }
+    if (!dragging) return;
+    dragging = false;
+    accumPx  = 0;
+    $viewer.classList.remove("dragging");
 });
 
-// ── Keyboard ──────────────────────────────────────────────────────────────────
+// ─── Touch events ────────────────────────────────────────────────────────────
 
-document.addEventListener("keydown", e => {
-    // Spatial mapping: Up/Down = forward/back along the path;
-    // Left/Right = lateral graph neighbours when they exist,
-    // silently no-ops in linear fallback where only forward/back are defined.
-    if      (e.key === "ArrowUp")    moveInDirection("forward");
-    else if (e.key === "ArrowDown")  moveInDirection("back");
-    else if (e.key === "ArrowLeft")  moveInDirection("left");
-    else if (e.key === "ArrowRight") moveInDirection("right");
-    else if (e.key === " ")          { e.preventDefault(); togglePlay(); }
-    else if (e.key === "d")          toggleDebug();
-});
+$viewer.addEventListener("touchstart", e => {
+    const t  = e.touches[0];
+    txStart  = t.clientX;
+    tyStart  = t.clientY;
+    tAxis    = null;
+    dragging = true;
+    lastX    = t.clientX;
+    accumPx  = 0;
+}, { passive: true });
 
-// ── Debug ─────────────────────────────────────────────────────────────────────
+$viewer.addEventListener("touchmove", e => {
+    if (!dragging) return;
+    const t  = e.touches[0];
+    const dx = Math.abs(t.clientX - txStart);
+    const dy = Math.abs(t.clientY - tyStart);
 
-function toggleDebug() {
-    const el = document.getElementById("debug");
-    el.style.display = el.style.display === "block" ? "none" : "block";
-}
-
-function updateDebug() {
-    const el = document.getElementById("debug");
-    if (el.style.display !== "block") return;
-    const nb = getNeighbors(current);
-    const heading = frameObjects[current]?.heading;
-    const sa = scanAnalysis;
-
-    // Frame quality summary — computed inline so it always reflects current state.
-    let qAvg = "—", qWorst = "—";
-    if (frameQuality.length > 0) {
-        const sum  = frameQuality.reduce((a, b) => a + b, 0);
-        qAvg  = Math.round((sum / frameQuality.length) * 100) + "%";
-        let worstScore = 1, worstIdx = 0;
-        frameQuality.forEach((q, i) => { if (q < worstScore) { worstScore = q; worstIdx = i; } });
-        qWorst = `#${worstIdx} (${Math.round(worstScore * 100)}%)`;
+    // Determine axis on first significant movement.
+    if (!tAxis) {
+        if (dx > dy + 8)      tAxis = "h";
+        else if (dy > dx + 8) tAxis = "v";
+        else return;
     }
-    // scanAnalysis.duplicateCount now uses the same 5° threshold as computeFrameQuality(),
-    // so reading it directly avoids computing the same thing twice.
-    const qDups = sa ? String(sa.duplicateCount) : "—";
 
-    el.textContent =
-        `frame: ${current} / ${frameURLs.length - 1}  stripPos: ${stripPos.toFixed(2)}  vel: ${stripVel.toFixed(3)}\n` +
-        `strip: ${stripMode ? "on" : "off (<4 frames)"}  active: ${isStripActive}\n` +
-        `graph: ${hasGraph ? "yes" : "fallback"}  circular: ${isCircular ? "yes" : "no"}\n` +
-        `heading: ${heading != null ? Math.round(heading) + "°" : "—"}\n` +
-        `mode: ${captureMode || "—"}  lens: ${lensFactor != null ? lensFactor + "x" : "—"}  target: ${targetFrameCount ?? "—"}\n` +
-        `neighbors: ${JSON.stringify(nb)}\n` +
-        `scanType: ${sa ? sa.scanType : "—"}  coverage: ${sa ? Math.round(sa.coverageFraction * 100) + "%" : "—"}\n` +
-        `largestGap: ${sa ? Math.round(sa.largestGap) + "°" : "—"}  avgΔyaw: ${sa ? Math.round(sa.avgDeltaYaw * 10) / 10 + "°" : "—"}  dups: ${sa ? sa.duplicateCount : "—"}\n` +
-        `quality: avg ${qAvg}  worst ${qWorst}  dupFrames ${qDups}\n` +
-        `session: ${SESSION_ID}`;
-}
-
-// ── UI updates ────────────────────────────────────────────────────────────────
-
-function updateUI() {
-    document.getElementById("progress").textContent = `${current + 1} / ${frameURLs.length}`;
-    updateDots();
-    updateRoomStrip(current);
-    renderHotspots();
-    updateCompass(current);
-    updateDebug();
-    updateRoomLabel(current);
-    updateAnnotationPanel(current);
-    renderMinimap();
-}
-
-function buildDots() {
-    const container = document.getElementById("dots");
-    container.innerHTML = "";
-    if (frameURLs.length > DOT_THRESHOLD) {
-        // Show the thin progress bar for large linear scans.
-        // Suppress it for circular scans — position on a loop has no meaningful
-        // start/end, so the bar would reset confusingly on each wrap.
-        if (!isCircular) {
-            document.getElementById("progress-bar").style.display = "block";
-        }
+    if (tAxis === "v") {
+        // Vertical scroll — release drag and let browser handle it.
+        dragging = false;
         return;
     }
-    frameURLs.forEach((_, i) => {
-        const d = document.createElement("div");
-        d.className = "dot";
-        d.onclick = () => { stopPlay(); goTo(i, i > current ? "forward" : "back"); };
-        container.appendChild(d);
-    });
+
+    accumPx += t.clientX - lastX;
+    lastX    = t.clientX;
+    flushAccum();
+}, { passive: true });
+
+$viewer.addEventListener("touchend", () => {
+    dragging = false;
+    accumPx  = 0;
+    tAxis    = null;
+}, { passive: true });
+
+$viewer.addEventListener("touchcancel", () => {
+    dragging = false;
+    accumPx  = 0;
+    tAxis    = null;
+}, { passive: true });
+
+// ─── Keyboard ────────────────────────────────────────────────────────────────
+
+document.addEventListener("keydown", e => {
+    if (e.key === "ArrowRight") stepBy(1);
+    if (e.key === "ArrowLeft")  stepBy(-1);
+});
+
+// ─── Intro autoplay ──────────────────────────────────────────────────────────
+
+function runAutoplay() {
+    if (frames.length < 2) return;
+    const msPerStep = 1000 / AUTOPLAY_FPS;
+    let elapsed  = 0;
+    let stepAcc  = 0;
+    let last     = null;
+
+    function tick(now) {
+        if (last === null) last = now;
+        const dt = now - last;
+        last      = now;
+        elapsed  += dt;
+        stepAcc  += dt;
+
+        while (stepAcc >= msPerStep) {
+            stepAcc -= msPerStep;
+            stepBy(1);
+        }
+
+        if (elapsed < AUTOPLAY_MS) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
 }
 
-function updateDots() {
-    document.querySelectorAll(".dot").forEach((d, i) => {
-        d.classList.toggle("active", i === current);
-    });
-    // Keep progress bar in sync regardless of which mode is active.
-    // The bar is display:none for small scans so this is a silent no-op then.
-    const fill = document.getElementById("progress-bar-fill");
-    if (fill) {
-        const pct = frameURLs.length > 1
-            ? (current / (frameURLs.length - 1)) * 100
-            : 0;
-        fill.style.width = pct + "%";
+// ─── Preload ─────────────────────────────────────────────────────────────────
+
+function preloadAll() {
+    // Start at current+1 so remaining frames load while first is already shown.
+    const n = urls.length;
+    for (let i = 1; i < n; i++) {
+        const img = new Image();
+        img.src = urls[(current + i) % n];
     }
 }
 
-function buildRoomStrip() {
-    const strip = document.getElementById("room-strip");
-    strip.innerHTML = "";
-    if (rooms.length === 0) return;
-    rooms.forEach(room => {
-        const chip = document.createElement("div");
-        chip.className = "room-chip";
-        chip.textContent = room.name;
-        chip.onclick = () => { stopPlay(); setFrame(room.start_frame ?? 0); };
-        strip.appendChild(chip);
-    });
+// ─── Init ────────────────────────────────────────────────────────────────────
+
+async function init() {
+    try {
+        const res = await fetch(`/api/scan/${SCAN_ID}/manifest`);
+        if (!res.ok) throw new Error(`Manifest ${res.status}`);
+        const manifest = await res.json();
+        if (manifest.error) throw new Error(manifest.error);
+
+        // Build frame list from manifest.frames.
+        const raw = manifest.frames || [];
+        const pairs = [];
+
+        raw.forEach(f => {
+            if (!f || f.discarded) return;
+            const fname = (typeof f === "object") ? (f.filename || "") : String(f || "");
+            if (!fname) return;
+            const yaw = (typeof f === "object")
+                ? (parseFloat(f.yaw_degrees) || parseFloat(f.heading) || 0)
+                : 0;
+            pairs.push({ fname, yaw });
+        });
+
+        if (!pairs.length) throw new Error("No frames in manifest.");
+
+        // Sort by yaw ascending — canonical rotation order.
+        pairs.sort((a, b) => a.yaw - b.yaw);
+
+        frames = pairs.map(p => ({ filename: p.fname, yaw: p.yaw }));
+        urls   = pairs.map(p => `/uploads/${SCAN_ID}/${p.fname}`);
+
+        $name.textContent = manifest.scan_name || SCAN_ID;
+
+        // Show first frame immediately (no crossfade).
+        showFrame(0, true);
+
+        // Hide loader once the first image is ready.
+        function onReady() {
+            $la.onload = $la.onerror = null;
+            $loading.classList.add("fade");
+            setTimeout(() => { $loading.style.display = "none"; }, 350);
+            preloadAll();
+            runAutoplay();
+            setTimeout(() => { $hint.classList.add("gone"); }, 4000);
+            track("viewer_open");
+        }
+
+        if ($la.complete && $la.naturalWidth) {
+            onReady();
+        } else {
+            $la.onload  = onReady;
+            $la.onerror = onReady; // show viewer even if first frame 404s
+        }
+
+    } catch (err) {
+        $loading.style.display = "none";
+        $errMsg.textContent    = err.message || "Could not load tour.";
+        $error.classList.add("show");
+    }
 }
 
-function updateRoomStrip(index) {
-    document.querySelectorAll(".room-chip").forEach((chip, i) => {
-        const r = rooms[i];
-        chip.classList.toggle("active",
-            r !== undefined && index >= (r.start_frame ?? 0) && index <= (r.end_frame ?? 0)
-        );
-    });
-}
-
-function clamp(val, min, max) { return Math.max(min, Math.min(max, val)); }
-
-loadSession();
+init();
 </script>
 </body>
 </html>

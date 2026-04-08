@@ -19,11 +19,11 @@ log = logging.getLogger(__name__)
 
 # ── Scan-id validation ────────────────────────────────────────────────────────
 
-_SCAN_ID_RE = re.compile(r'^[0-9a-f]{8}(-[0-9a-f]{4}){0,4}$')
+_SCAN_ID_RE = re.compile(r'^[0-9a-zA-Z_-]{1,64}$')
 
 def valid_scan_id(scan_id: str) -> bool:
-    """Accept 8-char hex UUIDs (short form) or full UUID strings."""
-    return bool(_SCAN_ID_RE.match(scan_id.lower())) if scan_id else False
+    """Accept alphanumeric IDs, hyphens, and underscores (up to 64 chars)."""
+    return bool(_SCAN_ID_RE.match(scan_id)) if scan_id else False
 
 def scan_folder(scan_id: str) -> str:
     return os.path.join(UPLOAD_FOLDER, scan_id)
