@@ -443,9 +443,22 @@ ALLOWED_EVENT_TYPES = {
     "lead_form_opened", "lead_submitted",
 }
 
+# Short-form aliases accepted from legacy clients (iOS app v1).
+_EVENT_TYPE_ALIASES = {
+    "view":    "viewer_open",
+    "open":    "viewer_open",
+    "start":   "session_start",
+    "end":     "session_end",
+    "frame":   "frame_view",
+    "lead":    "lead_submitted",
+    "share":   "share_view",
+}
+
 
 def _ingest_analytics_event(scan_id: str, body: dict):
-    event_type = sanitize(body.get("event_type") or "", 50)
+    # Accept "event" as an alias for "event_type" (iOS app v1 compatibility).
+    raw_type   = sanitize(body.get("event_type") or body.get("event") or "", 50)
+    event_type = _EVENT_TYPE_ALIASES.get(raw_type, raw_type)
     session_id = sanitize(body.get("session_id") or "", 64)
 
     if not event_type:
@@ -610,7 +623,8 @@ def _submit_lead(scan_id: str, body: dict):
     if body.get("website"):
         return jsonify({"ok": True})
 
-    full_name    = sanitize(body.get("full_name")    or "", 200)
+    # Accept "name" as an alias for "full_name" (legacy / iOS app v1 compatibility).
+    full_name    = sanitize(body.get("full_name") or body.get("name") or "", 200)
     email        = sanitize(body.get("email")        or "", 200)
     phone        = sanitize(body.get("phone")        or "", 50)
     message      = sanitize(body.get("message")      or "", 2000)
